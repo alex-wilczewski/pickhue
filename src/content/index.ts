@@ -1,31 +1,64 @@
+import pickerCss from "./picker.css?inline";
 import { PanelController } from "./panel";
 import { EyedropperOverlay } from "./picker";
 
-const picker = new EyedropperOverlay();
-const panel = new PanelController({
-  onStartPicker: () => {
-    panel.hide();
-    void picker.start();
-  },
-});
+const LOADED_FLAG = "__pickhueContentLoaded";
+const PICKER_STYLE_ID = "pickhue-picker-styles";
 
-// When the eyedropper closes (pick, Esc, or cancel) bring the panel back so the
-// freshly picked color is visible at the front of Recent Colors.
-picker.onClose = () => {
-  void panel.show();
-};
+if (!(globalThis as Record<string, unknown>)[LOADED_FLAG]) {
+  (globalThis as Record<string, unknown>)[LOADED_FLAG] = true;
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (message.type === "PING") {
-    sendResponse({ ok: true });
-    return true;
+  // The eyedropper overlay lives in the page's light DOM, so its styles must be
+  // injected here (this bundle is self-contained — no manifest content CSS).
+  if (!document.getElementById(PICKER_STYLE_ID)) {
+    const style = document.createElement("style");
+    style.id = PICKER_STYLE_ID;
+    style.textContent = pickerCss;
+    (document.head ?? document.documentElement).append(style);
   }
 
-  if (message.type === "TOGGLE_PANEL") {
-    void panel.toggle();
-    sendResponse({ ok: true });
-    return true;
+  // Wait for the browser to composite a frame. `captureVisibleTab` snapshots the
+  // last painted frame, so after removing the panel we must let the page repaint
+  // (panel-free) before the picker captures — otherwise the magnifier samples a
+  // screenshot that still shows the panel.
+  const waitForRepaint = (): Promise<void> =>
+    new Promise((resolve) => {
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => setTimeout(resolve, 0))
+      );
+    });
+
+  const picker = new EyedropperOverlay();
+  const panel = new PanelController({
+    onStartPicker: () => {
+      void launchPicker();
+    },
+  });
+
+  async function launchPicker(): Promise<void> {
+    panel.hideImmediate();
+    await waitForRepaint();
+    await picker.start();
   }
 
-  return undefined;
-});
+  // When the eyedropper closes (pick, Esc, or cancel) bring the panel back so
+  // the freshly picked color is visible at the front of Recent Colors.
+  picker.onClose = () => {
+    void panel.show();
+  };
+
+  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    if (message.type === "PING") {
+      sendResponse({ ok: true });
+      return true;
+    }
+
+    if (message.type === "TOGGLE_PANEL") {
+      void panel.toggle();
+      sendResponse({ ok: true });
+      return true;
+    }
+
+    return undefined;
+  });
+}

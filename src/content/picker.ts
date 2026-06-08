@@ -70,8 +70,7 @@ export class EyedropperOverlay {
     this.ctx.drawImage(image, 0, 0);
     this.scale = image.width / window.innerWidth;
     this.active = true;
-    this.pointerX = window.innerWidth / 2;
-    this.pointerY = window.innerHeight / 2;
+    this.hasPointer = false;
     this.mount();
     document.addEventListener("keydown", this.onKeyDown, true);
   }
@@ -92,6 +91,7 @@ export class EyedropperOverlay {
     this.ctx = null;
     this.loupe = null;
     this.lensCtx = null;
+    this.hasPointer = false;
     this.onClose?.();
   }
 
@@ -160,12 +160,17 @@ export class EyedropperOverlay {
       return;
     }
 
+    if (!this.hasPointer) {
+      this.loupe.style.opacity = "0";
+      return;
+    }
+
     // Center the loupe on the pointer so the magnified center pixel is exactly
     // the pixel that will be picked (the system cursor is hidden via CSS).
     const tx = Math.round(this.pointerX - LOUPE_SIZE / 2);
     const ty = Math.round(this.pointerY - LOUPE_SIZE / 2);
     this.loupe.style.transform = `translate(${tx}px, ${ty}px)`;
-    this.loupe.style.opacity = this.hasPointer ? "1" : "0.9";
+    this.loupe.style.opacity = "1";
 
     this.drawLens();
 
@@ -179,6 +184,10 @@ export class EyedropperOverlay {
   private handleClick = (event: MouseEvent): void => {
     event.preventDefault();
     event.stopPropagation();
+
+    if (!this.hasPointer) {
+      return;
+    }
 
     const hex = this.sampleAt(event.clientX, event.clientY);
     if (!hex) {

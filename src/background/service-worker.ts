@@ -1,84 +1,94 @@
+import { isGalleryUrl } from "../shared/gallery";
 import { addRecentColor } from "../shared/storage";
 
-const RESTRICTED_PREFIXES = [
+const CONTENT_SCRIPT = "content.js";
+
+/** Browser-internal pages where scripting is never allowed. */
+const HARD_RESTRICTED_PREFIXES = [
   "chrome://",
   "brave://",
   "edge://",
   "about:",
   "chrome-extension://",
-  "https://chrome.google.com/webstore",
-  "https://chromewebstore.google.com",
+  "devtools://",
 ];
 
-function isRestricted(url: string | undefined): boolean {
+function isHardRestricted(url: string | undefined): boolean {
   if (!url) {
     return true;
   }
-  return RESTRICTED_PREFIXES.some((prefix) => url.startsWith(prefix));
+  return HARD_RESTRICTED_PREFIXES.some((prefix) => url.startsWith(prefix));
 }
 
-/**
- * Make sure the content script is running in the tab. It's declared in the
- * manifest so it auto-injects on normal navigations, but on pages that were
- * already open when the extension loaded/updated we re-inject on demand.
- */
-async function ensureContentReady(tabId: number): Promise<boolean> {
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function injectContentScript(tabId: number): Promise<boolean> {
   try {
-    await chrome.tabs.sendMessage(tabId, { type: "PING" });
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files: [CONTENT_SCRIPT],
+    });
     return true;
   } catch {
-    const entry = chrome.runtime.getManifest().content_scripts?.[0];
-    if (!entry) {
-      return false;
-    }
-
-    try {
-      if (entry.css) {
-        for (const file of entry.css) {
-          await chrome.scripting.insertCSS({ target: { tabId }, files: [file] });
-        }
-      }
-      if (entry.js) {
-        await chrome.scripting.executeScript({
-          target: { tabId },
-          files: entry.js,
-        });
-      }
-      return true;
-    } catch {
-      return false;
-    }
+    return false;
   }
 }
 
-async function flashBadge(tabId: number, text: string): Promise<void> {
-  await chrome.action.setBadgeBackgroundColor({ tabId, color: "#464646" });
-  await chrome.action.setBadgeText({ tabId, text });
-  setTimeout(() => {
-    void chrome.action.setBadgeText({ tabId, text: "" });
-  }, 1600);
+async function pingContentScript(tabId: number): Promise<boolean> {
+  try {
+    const response = (await chrome.tabs.sendMessage(tabId, {
+      type: "PING",
+    })) as { ok?: boolean } | undefined;
+    return response?.ok === true;
+  } catch {
+    return false;
+  }
 }
 
+/**
+ * Send a message to the content script, injecting it first if needed. Retries a
+ * few times so the very first click after install/navigation is reliable.
+ */
+async function sendToContent(
+  tabId: number,
+  type: "TOGGLE_PANEL" | "START_PICKER"
+): Promise<boolean> {
+  let injected = false;
+
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    if (await pingContentScript(tabId)) {
+      try {
+        await chrome.tabs.sendMessage(tabId, { type });
+        return true;
+      } catch {
+        /* listener not ready yet — fall through to retry */
+      }
+    }
+
+    if (!injected) {
+      injected = await injectContentScript(tabId);
+      if (!injected) {
+        return false;
+      }
+    }
+
+    await sleep(30 + attempt * 25);
+  }
+
+  return false;
+}
+
+// Clicking the toolbar icon toggles the in-page panel. On pages the picker can't
+// run on (browser-internal pages and the Chrome Web Store, which forbid
+// scripting) we simply do nothing.
 chrome.action.onClicked.addListener((tab) => {
   void (async () => {
-    if (!tab.id || isRestricted(tab.url)) {
-      if (tab.id) {
-        await flashBadge(tab.id, "n/a");
-      }
+    if (!tab.id || isHardRestricted(tab.url) || isGalleryUrl(tab.url)) {
       return;
     }
-
-    const ready = await ensureContentReady(tab.id);
-    if (!ready) {
-      await flashBadge(tab.id, "n/a");
-      return;
-    }
-
-    try {
-      await chrome.tabs.sendMessage(tab.id, { type: "TOGGLE_PANEL" });
-    } catch {
-      await flashBadge(tab.id, "n/a");
-    }
+    await sendToContent(tab.id, "TOGGLE_PANEL");
   })();
 });
 

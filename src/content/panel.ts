@@ -2,16 +2,17 @@ import panelCss from "./panel.css?inline";
 import { copyText } from "../shared/clipboard";
 import { formatColor } from "../shared/colors";
 import { addRecentColor, getSettings, saveSettings } from "../shared/storage";
-import type { ColorFormat, Settings } from "../shared/types";
+import { resolveTheme } from "../shared/theme";
+import type { ColorFormat, Settings, ThemeMode } from "../shared/types";
 
 const HOST_ID = "pickhue-panel-host";
+const PANEL_STYLES_ID = "pickhue-panel-styles";
 const CLOSE_ANIM_MS = 180;
 
-const formatLabels: Record<ColorFormat, string> = {
-  hex: "HEX",
-  rgb: "RGB",
-  hsl: "HSL",
-};
+/** Strip :host reset — it must not run against popup page roots. */
+function panelCssForPage(css: string): string {
+  return css.replace(/:host\s*\{[^}]*\}/, "");
+}
 
 const TEMPLATE = `
   <div class="panel" data-theme="dark">
@@ -44,26 +45,34 @@ const TEMPLATE = `
       <h2 class="panel__label">Extension Settings</h2>
 
       <div class="panel__setting">
-        <span class="panel__setting-label">Light Mode</span>
-        <button class="toggle" type="button" role="switch" aria-checked="false" data-ref="toggle">
-          <span class="toggle__thumb"></span>
-        </button>
+        <span class="panel__setting-label">Theme</span>
+        <div class="theme-switcher" role="radiogroup" aria-label="Theme" data-ref="theme-switcher">
+          <button type="button" class="theme-switcher__btn" data-theme-mode="system" role="radio" aria-checked="false" aria-label="System theme">
+            <svg class="icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+              <rect x="4" y="6" width="16" height="10" rx="2" stroke="currentColor" stroke-width="2" fill="none"/>
+              <path d="M9 19h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </button>
+          <button type="button" class="theme-switcher__btn" data-theme-mode="light" role="radio" aria-checked="false" aria-label="Light theme">
+            <svg class="icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+              <circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2" fill="none"/>
+              <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </button>
+          <button type="button" class="theme-switcher__btn" data-theme-mode="dark" role="radio" aria-checked="false" aria-label="Dark theme">
+            <svg class="icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+              <path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9Z" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+        </div>
       </div>
 
       <div class="panel__setting">
         <span class="panel__setting-label">Color Format</span>
-        <div class="select" data-ref="select">
-          <button class="select__trigger" type="button" aria-haspopup="listbox" aria-expanded="false" data-ref="formatTrigger">
-            <span data-ref="formatValue">HEX</span>
-            <svg class="icon icon--chevron" viewBox="0 0 24 24" width="10" height="10" aria-hidden="true">
-              <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-            </svg>
-          </button>
-          <ul class="select__menu" role="listbox" data-ref="formatMenu" hidden>
-            <li><button type="button" data-format="hex" role="option">HEX</button></li>
-            <li><button type="button" data-format="rgb" role="option">RGB</button></li>
-            <li><button type="button" data-format="hsl" role="option">HSL</button></li>
-          </ul>
+        <div class="format-switcher" role="radiogroup" aria-label="Color format" data-ref="format-switcher">
+          <button type="button" class="format-switcher__btn" data-format="hex" role="radio" aria-checked="true">HEX</button>
+          <button type="button" class="format-switcher__btn" data-format="rgb" role="radio" aria-checked="false">RGB</button>
+          <button type="button" class="format-switcher__btn" data-format="hsl" role="radio" aria-checked="false">HSL</button>
         </div>
       </div>
     </section>
@@ -79,24 +88,39 @@ const TEMPLATE = `
   </div>
 `;
 
+type HostContext = "content-script" | "extension-page";
+
 interface PanelOptions {
+  hostContext?: HostContext;
   onStartPicker: () => void;
 }
 
 export class PanelController {
+  private readonly hostContext: HostContext;
   private host: HTMLDivElement | null = null;
   private shadow: ShadowRoot | null = null;
   private panelEl: HTMLElement | null = null;
   private closeTimer = 0;
   private toastTimer = 0;
   private settings: Settings = {
-    lightMode: false,
+    themeMode: "system",
     colorFormat: "hex",
     recentColors: [],
   };
   private hadRecentColors = false;
+  private readonly systemThemeQuery = window.matchMedia(
+    "(prefers-color-scheme: dark)"
+  );
+  private readonly onSystemThemeChange = (): void => {
+    if (this.settings.themeMode === "system" && this.isOpen) {
+      this.applyResolvedTheme();
+    }
+  };
 
   constructor(private readonly options: PanelOptions) {
+    this.hostContext = options.hostContext ?? "content-script";
+    this.systemThemeQuery.addEventListener("change", this.onSystemThemeChange);
+
     chrome.storage.onChanged.addListener((changes, area) => {
       if (area !== "sync" || !changes.pickhue_settings) {
         return;
@@ -116,6 +140,9 @@ export class PanelController {
   }
 
   get isOpen(): boolean {
+    if (this.hostContext === "extension-page") {
+      return this.panelEl !== null;
+    }
     return this.host !== null && this.closeTimer === 0;
   }
 
@@ -147,10 +174,31 @@ export class PanelController {
     this.mount();
     this.renderSettings();
     this.renderRecentColors();
-    requestAnimationFrame(() => this.panelEl?.classList.add("is-open"));
+    if (this.hostContext === "extension-page") {
+      this.panelEl?.classList.add("is-open");
+    } else {
+      requestAnimationFrame(() => this.panelEl?.classList.add("is-open"));
+    }
+  }
+
+  flashCtaMessage(message: string, durationMs = 2200): void {
+    const button = this.ref<HTMLButtonElement>("select-color");
+    if (!button) {
+      return;
+    }
+    const original = button.textContent ?? "Select Color";
+    button.textContent = message;
+    window.setTimeout(() => {
+      button.textContent = original;
+    }, durationMs);
   }
 
   hide(): void {
+    if (this.hostContext === "extension-page") {
+      window.close();
+      return;
+    }
+
     if (!this.host || this.closeTimer) {
       return;
     }
@@ -167,7 +215,35 @@ export class PanelController {
     }, CLOSE_ANIM_MS);
   }
 
+  /**
+   * Tear the panel out of the DOM immediately, with no close animation. Used
+   * right before starting the eyedropper: `captureVisibleTab` snapshots the page
+   * synchronously, so the panel host must be gone (and the page repainted)
+   * before capture, otherwise the magnifier samples a screenshot that still
+   * contains the panel.
+   */
+  hideImmediate(): void {
+    if (this.hostContext === "extension-page") {
+      window.close();
+      return;
+    }
+
+    if (this.closeTimer) {
+      window.clearTimeout(this.closeTimer);
+      this.closeTimer = 0;
+    }
+    this.host?.remove();
+    this.host = null;
+    this.shadow = null;
+    this.panelEl = null;
+  }
+
   private mount(): void {
+    if (this.hostContext === "extension-page") {
+      this.mountExtensionPage();
+      return;
+    }
+
     this.host = document.createElement("div");
     this.host.id = HOST_ID;
     this.host.style.cssText =
@@ -185,8 +261,28 @@ export class PanelController {
     this.bindEvents();
   }
 
+  private mountExtensionPage(): void {
+    if (!document.getElementById(PANEL_STYLES_ID)) {
+      const style = document.createElement("style");
+      style.id = PANEL_STYLES_ID;
+      style.textContent = panelCssForPage(panelCss);
+      document.head.append(style);
+    }
+
+    const wrapper = document.createElement("div");
+    wrapper.innerHTML = TEMPLATE;
+    this.panelEl = wrapper.querySelector(".panel");
+    this.panelEl?.classList.add("panel--page");
+
+    if (this.panelEl) {
+      document.body.append(this.panelEl);
+    }
+    this.bindEvents();
+  }
+
   private ref<T extends Element>(name: string): T | null {
-    return this.shadow?.querySelector<T>(`[data-ref="${name}"]`) ?? null;
+    const root = this.shadow ?? document;
+    return root.querySelector<T>(`[data-ref="${name}"]`) ?? null;
   }
 
   private bindEvents(): void {
@@ -201,76 +297,104 @@ export class PanelController {
     // Translate vertical wheel into horizontal scroll while hovering the recent
     // colors row (Chromium doesn't do this automatically for inner elements).
     const scroller = this.ref<HTMLElement>("scroller");
-    scroller?.addEventListener(
-      "wheel",
-      (event) => {
-        const delta = event.deltaY !== 0 ? event.deltaY : event.deltaX;
-        if (delta === 0 || scroller.scrollWidth <= scroller.clientWidth) {
+    const track = this.ref<HTMLElement>("track");
+    if (scroller && track) {
+      let targetScroll = 0;
+      let scrollRafId = 0;
+      let direction = 1; // +1 = scrolling toward the end, -1 = toward the start
+      let lastLeft = Number.NaN; // detects hitting a hard scroll bound
+
+      const maxScroll = (): number =>
+        Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+
+      // Hand the resting position to native CSS scroll-snap so the edge inset
+      // lands on the device-pixel grid (clean at every zoom). Choose which edge
+      // to align based on the direction the user scrolled.
+      const settleSnap = (): void => {
+        scroller.classList.toggle("snap-end", direction >= 0);
+        scroller.classList.add("is-snapping");
+      };
+
+      const animateScroll = (): void => {
+        const diff = targetScroll - scroller.scrollLeft;
+        const stuck = scroller.scrollLeft === lastLeft; // hit a hard bound
+        lastLeft = scroller.scrollLeft;
+
+        if (Math.abs(diff) <= 0.5 || (stuck && Math.abs(diff) <= 4)) {
+          scrollRafId = 0;
+          settleSnap();
           return;
         }
-        event.preventDefault();
-        scroller.scrollLeft += delta;
-      },
-      { passive: false }
-    );
 
-    this.ref<HTMLButtonElement>("toggle")?.addEventListener("click", () => {
-      void this.toggleLightMode();
-    });
+        scroller.scrollLeft += diff * 0.22;
+        scrollRafId = requestAnimationFrame(animateScroll);
+      };
 
-    const formatTrigger = this.ref<HTMLButtonElement>("formatTrigger");
-    const formatMenu = this.ref<HTMLUListElement>("formatMenu");
+      scroller.addEventListener(
+        "wheel",
+        (event) => {
+          const delta = event.deltaY !== 0 ? event.deltaY : event.deltaX;
+          if (delta === 0 || maxScroll() === 0) {
+            return;
+          }
+          event.preventDefault();
+          direction = delta > 0 ? 1 : -1;
 
-    formatTrigger?.addEventListener("click", (event) => {
-      event.stopPropagation();
-      const expanded = formatTrigger.getAttribute("aria-expanded") === "true";
-      formatTrigger.setAttribute("aria-expanded", expanded ? "false" : "true");
-      if (formatMenu) {
-        formatMenu.hidden = expanded;
-      }
-    });
+          // Disable mandatory snap during the gesture so it never fights the
+          // free-scroll momentum; it's re-enabled when the scroll settles.
+          scroller.classList.remove("is-snapping");
 
-    formatMenu?.querySelectorAll<HTMLButtonElement>("button").forEach((button) => {
-      button.addEventListener("click", () => {
-        void this.updateColorFormat(button.dataset.format as ColorFormat);
-        formatTrigger?.setAttribute("aria-expanded", "false");
-        formatMenu.hidden = true;
+          // Resync to the live position when starting a fresh gesture so the
+          // target never drifts, and keep a single animation loop running.
+          const running = scrollRafId !== 0;
+          if (!running) {
+            targetScroll = scroller.scrollLeft;
+            lastLeft = Number.NaN;
+          }
+          targetScroll = Math.min(
+            maxScroll(),
+            Math.max(0, targetScroll + delta)
+          );
+          if (!running) {
+            scrollRafId = requestAnimationFrame(animateScroll);
+          }
+        },
+        { passive: false }
+      );
+    }
+
+    this.ref<HTMLElement>("theme-switcher")
+      ?.querySelectorAll<HTMLButtonElement>("[data-theme-mode]")
+      .forEach((button) => {
+        button.addEventListener("click", () => {
+          void this.setThemeMode(button.dataset.themeMode as ThemeMode);
+        });
       });
-    });
 
-    // Close the format menu when clicking elsewhere inside the panel.
-    this.shadow?.addEventListener("click", (event) => {
-      const select = this.ref<HTMLElement>("select");
-      if (select && event.target instanceof Node && !select.contains(event.target)) {
-        formatTrigger?.setAttribute("aria-expanded", "false");
-        if (formatMenu) {
-          formatMenu.hidden = true;
-        }
-      }
-    });
+    this.ref<HTMLElement>("format-switcher")
+      ?.querySelectorAll<HTMLButtonElement>("[data-format]")
+      .forEach((button) => {
+        button.addEventListener("click", () => {
+          void this.updateColorFormat(button.dataset.format as ColorFormat);
+        });
+      });
   }
 
   private renderSettings(): void {
-    const theme = this.settings.lightMode ? "light" : "dark";
-    this.panelEl?.setAttribute("data-theme", theme);
+    this.applyResolvedTheme();
 
-    this.ref<HTMLButtonElement>("toggle")?.setAttribute(
-      "aria-checked",
-      this.settings.lightMode ? "true" : "false"
-    );
-
-    const formatValue = this.ref<HTMLElement>("formatValue");
-    if (formatValue) {
-      formatValue.textContent = formatLabels[this.settings.colorFormat];
-    }
-
-    this.ref<HTMLUListElement>("formatMenu")
-      ?.querySelectorAll<HTMLButtonElement>("button")
+    this.ref<HTMLElement>("theme-switcher")
+      ?.querySelectorAll<HTMLButtonElement>("[data-theme-mode]")
       .forEach((button) => {
-        button.setAttribute(
-          "aria-selected",
-          button.dataset.format === this.settings.colorFormat ? "true" : "false"
-        );
+        const selected = button.dataset.themeMode === this.settings.themeMode;
+        button.setAttribute("aria-checked", selected ? "true" : "false");
+      });
+
+    this.ref<HTMLElement>("format-switcher")
+      ?.querySelectorAll<HTMLButtonElement>("[data-format]")
+      .forEach((button) => {
+        const selected = button.dataset.format === this.settings.colorFormat;
+        button.setAttribute("aria-checked", selected ? "true" : "false");
       });
   }
 
@@ -282,6 +406,7 @@ export class PanelController {
     }
 
     const isEmpty = this.settings.recentColors.length === 0;
+    empty.hidden = !isEmpty;
     empty.classList.toggle("is-hidden", !isEmpty);
 
     track.replaceChildren(
@@ -306,8 +431,20 @@ export class PanelController {
     this.hadRecentColors = !isEmpty;
   }
 
-  private async toggleLightMode(): Promise<void> {
-    this.settings = await saveSettings({ lightMode: !this.settings.lightMode });
+  private applyResolvedTheme(): void {
+    const theme = resolveTheme(this.settings.themeMode);
+    this.panelEl?.setAttribute("data-theme", theme);
+
+    if (this.hostContext === "extension-page") {
+      document.body.dataset.theme = theme;
+    }
+  }
+
+  private async setThemeMode(mode: ThemeMode): Promise<void> {
+    if (!mode || mode === this.settings.themeMode) {
+      return;
+    }
+    this.settings = await saveSettings({ themeMode: mode });
     this.renderSettings();
   }
 

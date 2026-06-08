@@ -63,7 +63,12 @@ button {
   transform: translateY(-8px) scale(0.98);
   opacity: 0;
   transform-origin: top right;
-  transition: transform 0.18s ease, opacity 0.18s ease;
+  transition:
+    transform 0.18s ease,
+    opacity 0.18s ease,
+    background-color 0.22s ease,
+    color 0.22s ease,
+    box-shadow 0.22s ease;
 }
 
 .panel.is-open {
@@ -71,25 +76,57 @@ button {
   opacity: 1;
 }
 
+/* Action popup page (Web Store fallback) — fills the popup edge-to-edge with no
+   rounding so the browser's popup frame never shows a white squared backing. */
+.panel.panel--page {
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+  overflow: hidden;
+  transform: none;
+  opacity: 1;
+  box-shadow: none;
+}
+
 .panel[data-theme="light"] {
-  --bg: #f4f4f4;
-  --header-bg: rgba(255, 255, 255, 0.72);
-  --footer-bg: #e8e8e8;
+  --bg: #ededed;
+  --header-bg: #ffffff;
+  --footer-bg: #e2e2e2;
   --text: #141414;
-  --text-muted: rgba(20, 20, 20, 0.58);
-  --divider: rgba(20, 20, 20, 0.1);
-  --accent: #c8f04a;
+  --text-muted: rgba(20, 20, 20, 0.72);
+  --divider: rgba(20, 20, 20, 0.14);
+  --accent: #b8e635;
   --accent-text: #141414;
-  --close-bg: #d7d7d7;
-  --close-bg-hover: #c4c4c4;
-  --close-icon: #5a5a5a;
-  --swatch-track: rgba(20, 20, 20, 0.06);
-  --swatch-border: rgba(20, 20, 20, 0.12);
-  --swatch-border-hover: rgba(20, 20, 20, 0.34);
-  --control-border: #c8c8c8;
-  --toggle-track: #d0d0d0;
+  --close-bg: #d2d2d2;
+  --close-bg-hover: #bdbdbd;
+  --close-icon: #3a3a3a;
+  --swatch-track: rgba(20, 20, 20, 0.09);
+  --swatch-border: rgba(20, 20, 20, 0.18);
+  --swatch-border-hover: rgba(20, 20, 20, 0.42);
+  --control-border: #ababab;
+  --toggle-track: #c4c4c4;
   --toggle-thumb: #ffffff;
   --menu-bg: #ffffff;
+  box-shadow:
+    0 18px 48px rgba(0, 0, 0, 0.16),
+    0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.panel__header,
+.panel__footer,
+.panel__section,
+.panel__close,
+.panel__swatches-wrap,
+.panel__cta,
+.theme-switcher,
+.theme-switcher__btn,
+.format-switcher,
+.format-switcher__btn {
+  transition:
+    background-color 0.22s ease,
+    color 0.22s ease,
+    border-color 0.22s ease,
+    box-shadow 0.22s ease;
 }
 
 .panel__header {
@@ -128,7 +165,6 @@ button {
   display: grid;
   place-items: center;
   flex-shrink: 0;
-  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .panel__close:hover {
@@ -170,6 +206,8 @@ button {
 .panel__swatches-empty {
   position: absolute;
   inset: 0;
+  width: 100%;
+  height: 100%;
   margin: 0;
   display: flex;
   align-items: center;
@@ -177,16 +215,18 @@ button {
   padding: 0 12px;
   font-size: 12px;
   font-weight: 400;
+  line-height: 1.2;
   color: var(--text-muted);
   opacity: 0.45;
   pointer-events: none;
   text-align: center;
-  transition: opacity 0.2s ease;
+  transition: opacity 0.2s ease, visibility 0.2s ease;
   z-index: 1;
 }
 
-.panel__swatches-empty.is-hidden {
-  opacity: 0;
+.panel__swatches-empty.is-hidden,
+.panel__swatches-empty[hidden] {
+  display: none;
 }
 
 .panel__swatches {
@@ -204,6 +244,27 @@ button {
 
 .panel__swatches::-webkit-scrollbar {
   display: none;
+}
+
+/* The resting inset (4px against the scrolled-to edge) is handed to the browser's
+   native scroll-snap, which aligns to the device-pixel grid the compositor
+   rasterizes to. JS momentum can't do this (programmatic scrollLeft isn't
+   device-pixel-aware), which is why the inset only looked clean when zoomed in.
+   The .is-snapping class is toggled off during an active wheel gesture so the
+   mandatory snap never fights the free-scroll momentum. */
+.panel__swatches.is-snapping {
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  scroll-padding-left: 4px;
+  scroll-padding-right: 4px;
+}
+
+.panel__swatches .swatch {
+  scroll-snap-align: start;
+}
+
+.panel__swatches.snap-end .swatch {
+  scroll-snap-align: end;
 }
 
 .panel__swatches-inner {
@@ -268,88 +329,81 @@ button {
   margin-left: 8px;
 }
 
-.toggle {
-  width: 48px;
-  height: 29px;
-  border-radius: 999px;
-  background: var(--toggle-track);
-  padding: 3px;
-  display: flex;
-  align-items: center;
-  transition: background 0.2s ease;
-}
+.theme-switcher,
+.format-switcher {
+  --segment-inner-r: 4px;
+  --segment-padding: 2px;
+  --segment-border: 2px;
+  /* Concentric corners: outer = inner + padding (+ border for the box edge). */
+  --segment-outer-r: calc(
+    var(--segment-inner-r) + var(--segment-padding) + var(--segment-border)
+  );
 
-.toggle[aria-checked="true"] {
-  background: var(--accent);
-}
-
-.toggle__thumb {
-  width: 23px;
-  height: 23px;
-  border-radius: 50%;
-  background: var(--toggle-thumb);
-  transition: transform 0.2s ease;
-}
-
-.toggle[aria-checked="true"] .toggle__thumb {
-  transform: translateX(19px);
-}
-
-.select {
-  position: relative;
-}
-
-.select__trigger {
-  min-width: 72px;
-  height: 29px;
-  padding: 0 10px;
-  border: 2px solid var(--control-border);
-  border-radius: 6px;
-  color: var(--text);
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 4px;
-  font-size: 14px;
+  height: 29px;
+  padding: var(--segment-padding);
+  gap: var(--segment-padding);
+  border-radius: var(--segment-outer-r);
+  border: var(--segment-border) solid var(--control-border);
+  background: var(--swatch-track);
+  box-sizing: border-box;
+}
+
+.theme-switcher__btn,
+.format-switcher__btn {
+  height: 100%;
+  border-radius: var(--segment-inner-r);
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
   line-height: 1;
 }
 
-.icon--chevron {
-  opacity: 0.85;
+.theme-switcher__btn {
+  width: 28px;
 }
 
-.select__menu {
-  position: absolute;
-  right: 0;
-  bottom: calc(100% + 6px);
-  top: auto;
-  min-width: 88px;
-  margin: 0;
-  padding: 6px;
-  list-style: none;
-  border-radius: 8px;
-  background: var(--menu-bg);
-  border: 1px solid var(--control-border);
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
-  z-index: 20;
+.theme-switcher__btn .icon {
+  display: block;
+  flex-shrink: 0;
 }
 
-.select__menu[hidden] {
-  display: none;
+/* Per-icon optical sizing — stroke density and shape make equal px sizes
+   read differently (monitor reads small, moon reads large). */
+.theme-switcher__btn[data-theme-mode="system"] .icon {
+  width: 15.5px;
+  height: 15.5px;
 }
 
-.select__menu button {
-  width: 100%;
-  text-align: left;
-  padding: 8px 10px;
-  border-radius: 6px;
+.theme-switcher__btn[data-theme-mode="light"] .icon {
+  width: 14px;
+  height: 14px;
+}
+
+.theme-switcher__btn[data-theme-mode="dark"] .icon {
+  width: 12.5px;
+  height: 12.5px;
+}
+
+.format-switcher__btn {
+  min-width: 32px;
+  padding: 0 6px;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.theme-switcher__btn:hover,
+.format-switcher__btn:hover {
   color: var(--text);
-  font-size: 14px;
 }
 
-.select__menu button:hover,
-.select__menu button[aria-selected="true"] {
-  background: var(--swatch-track);
+.theme-switcher__btn[aria-checked="true"],
+.format-switcher__btn[aria-checked="true"] {
+  background: var(--menu-bg);
+  color: var(--text);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 .panel__footer {
@@ -393,10 +447,20 @@ button {
   z-index: 30;
 }
 
+.panel[data-theme="light"] .panel__swatches-empty:not(.is-hidden):not([hidden]) {
+  opacity: 0.62;
+}
+
+.panel[data-theme="light"] .theme-switcher__btn[aria-checked="true"],
+.panel[data-theme="light"] .format-switcher__btn[aria-checked="true"] {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
 .panel[data-theme="light"] .toast {
-  background: rgba(255, 255, 255, 0.96);
+  background: rgba(255, 255, 255, 0.98);
   color: #141414;
-  border-color: rgba(20, 20, 20, 0.08);
+  border-color: rgba(20, 20, 20, 0.14);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.12);
 }
 
 .toast.is-visible {
@@ -417,7 +481,7 @@ button {
 }
 
 .panel[data-theme="light"] .toast__swatch {
-  border-color: rgba(20, 20, 20, 0.12);
+  border-color: rgba(20, 20, 20, 0.18);
 }
 
 .toast__text {

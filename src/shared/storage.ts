@@ -1,13 +1,29 @@
-import { DEFAULT_SETTINGS, type Settings } from "./types";
+import {
+  DEFAULT_SETTINGS,
+  type LegacySettings,
+  type Settings,
+  type ThemeMode,
+} from "./types";
 
 const STORAGE_KEY = "pickhue_settings";
 
+function normalizeThemeMode(stored: LegacySettings | undefined): ThemeMode {
+  if (stored?.themeMode) {
+    return stored.themeMode;
+  }
+  if (typeof stored?.lightMode === "boolean") {
+    return stored.lightMode ? "light" : "dark";
+  }
+  return DEFAULT_SETTINGS.themeMode;
+}
+
 export async function getSettings(): Promise<Settings> {
   const result = await chrome.storage.sync.get(STORAGE_KEY);
-  const stored = result[STORAGE_KEY] as Partial<Settings> | undefined;
+  const stored = result[STORAGE_KEY] as LegacySettings | undefined;
   return {
     ...DEFAULT_SETTINGS,
     ...stored,
+    themeMode: normalizeThemeMode(stored),
     recentColors: stored?.recentColors ?? DEFAULT_SETTINGS.recentColors,
   };
 }

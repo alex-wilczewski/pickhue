@@ -5,8 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite build --watch",
+    "dev:content": "vite build --config vite.content.config.ts --watch",
     "prebuild": "node scripts/generate-icons.mjs",
     "build": "vite build",
+    "postbuild": "vite build --config vite.content.config.ts",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

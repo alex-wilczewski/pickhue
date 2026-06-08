@@ -22,14 +22,10 @@ export default defineManifest({
     service_worker: "src/background/service-worker.ts",
     type: "module",
   },
+  // The content script is built separately into a self-contained IIFE
+  // (dist/content.js) and injected on demand via chrome.scripting. It is not
+  // declared here so we never ship the @crxjs dynamic-import loader, which
+  // strict page CSPs reject.
   permissions: ["storage", "activeTab", "scripting", "tabs"],
   host_permissions: ["<all_urls>"],
-  content_scripts: [
-    {
-      matches: ["<all_urls>"],
-      js: ["src/content/index.ts"],
-      css: ["src/content/picker.css"],
-      run_at: "document_idle",
-    },
-  ],
 });
