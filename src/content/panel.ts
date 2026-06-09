@@ -68,8 +68,8 @@ const TEMPLATE = `
       </div>
 
       <div class="panel__setting">
-        <span class="panel__setting-label">Color Format</span>
-        <div class="format-switcher" role="radiogroup" aria-label="Color format" data-ref="format-switcher">
+        <span class="panel__setting-label">Format</span>
+        <div class="format-switcher" role="radiogroup" aria-label="Format" data-ref="format-switcher">
           <button type="button" class="format-switcher__btn" data-format="hex" role="radio" aria-checked="true">HEX</button>
           <button type="button" class="format-switcher__btn" data-format="rgb" role="radio" aria-checked="false">RGB</button>
           <button type="button" class="format-switcher__btn" data-format="hsl" role="radio" aria-checked="false">HSL</button>

@@ -1,5 +1,6 @@
 node_modules/
 dist/
+pickhue-*.zip
 *.log
 .DS_Store
 figma-extension-design.png

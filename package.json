@@ -9,12 +9,15 @@
     "prebuild": "node scripts/generate-icons.mjs",
     "build": "vite build",
     "postbuild": "vite build --config vite.content.config.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "package": "node scripts/package-extension.mjs",
+    "screenshots": "node scripts/capture-store-screenshots.mjs"
   },
   "devDependencies": {
-    "sharp": "^0.33.5",
     "@crxjs/vite-plugin": "^2.0.0-beta.28",
     "@types/chrome": "^0.0.287",
+    "playwright": "^1.60.0",
+    "sharp": "^0.33.5",
     "typescript": "^5.7.2",
     "vite": "^6.0.3"
   }

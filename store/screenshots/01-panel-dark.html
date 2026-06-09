@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>PickHue — Panel (dark)</title>
+    <link rel="stylesheet" href="scene.css" />
+    <link rel="stylesheet" href="panel.css" />
+  </head>
+  <body>
+    <div class="mock-page">
+      <div class="mock-page__hero"></div>
+      <div class="mock-page__content">
+        <h1 class="mock-page__title">Design with confidence</h1>
+        <p class="mock-page__body">
+          PickHue samples any pixel on the page with a precise magnifier and
+          copies it in the format you need.
+        </p>
+      </div>
+      <div class="mock-page__blocks">
+        <div class="mock-page__block" style="background: #e7fe96"></div>
+        <div class="mock-page__block" style="background: #6366f1"></div>
+        <div class="mock-page__block" style="background: #f472b6"></div>
+      </div>
+    </div>
+
+    <div class="panel-anchor">
+      <div class="panel" data-theme="dark">
+        <header class="panel__header">
+          <div class="panel__logo" aria-hidden="true">
+            <svg class="panel__logo-mark" viewBox="0 0 14 21" fill="none">
+              <path d="M0 8H5C5.55228 8 6 8.44772 6 9V15C6 18.3137 3.31371 21 0 21V8Z" fill="white"/>
+              <path d="M0 6L0 1.625C0 0.727538 0.783502 0 1.75 0L7.96923 0C11.2999 0 14 2.50721 14 5.6C14 5.82091 13.8071 6 0 6Z" fill="white"/>
+              <path d="M14 8C14 11.3137 11.3137 14 8 14V9C8 8.44772 8.44772 8 9 8H14Z" fill="white"/>
+            </svg>
+          </div>
+          <button class="panel__close" type="button" aria-label="Close">
+            <svg class="icon" viewBox="0 0 24 24" width="14" height="14">
+              <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </header>
+        <section class="panel__section panel__section--recent">
+          <h2 class="panel__label">Recent Colors</h2>
+          <div class="panel__swatches-wrap">
+            <div class="panel__swatches">
+              <div class="panel__swatches-inner">
+                <div class="swatch" style="background:#E7FE96"></div>
+                <div class="swatch" style="background:#6366F1"></div>
+                <div class="swatch" style="background:#F472B6"></div>
+                <div class="swatch" style="background:#38BDF8"></div>
+                <div class="swatch" style="background:#FB923C"></div>
+                <div class="swatch" style="background:#A78BFA"></div>
+                <div class="swatch" style="background:#34D399"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+        <section class="panel__section panel__section--settings">
+          <h2 class="panel__label">Extension Settings</h2>
+          <div class="panel__setting">
+            <span class="panel__setting-label">Theme</span>
+            <div class="theme-switcher">
+              <button class="theme-switcher__btn" data-theme-mode="system" aria-checked="false">
+                <svg class="icon" viewBox="0 0 24 24" width="14" height="14">
+                  <rect x="4" y="6" width="16" height="10" rx="2" stroke="currentColor" stroke-width="2" fill="none"/>
+                  <path d="M9 19h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+              </button>
+              <button class="theme-switcher__btn" data-theme-mode="light" aria-checked="false">
+                <svg class="icon" viewBox="0 0 24 24" width="14" height="14">
+                  <circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2" fill="none"/>
+                  <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+              </button>
+              <button class="theme-switcher__btn" data-theme-mode="dark" aria-checked="true">
+                <svg class="icon" viewBox="0 0 24 24" width="14" height="14">
+                  <path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9Z" stroke="currentColor" stroke-width="2" fill="none"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div class="panel__setting">
+            <span class="panel__setting-label">Color Format</span>
+            <div class="format-switcher">
+              <button class="format-switcher__btn" aria-checked="true">HEX</button>
+              <button class="format-switcher__btn" aria-checked="false">RGB</button>
+              <button class="format-switcher__btn" aria-checked="false">HSL</button>
+            </div>
+          </div>
+        </section>
+        <footer class="panel__footer">
+          <button class="panel__cta" type="button">Select Color</button>
+        </footer>
+      </div>
+    </div>
+  </body>
+</html>
