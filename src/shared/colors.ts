@@ -130,14 +130,14 @@ export function formatColor(hex: string, format: ColorFormat): string {
     case "hex":
       return normalized;
     case "rgb":
-      return `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`;
+      return `${rgb.r}, ${rgb.g}, ${rgb.b}`;
     case "hsl": {
       const { h, s, l } = rgbToHsl(rgb);
-      return `hsl(${h}, ${s}%, ${l}%)`;
+      return `${h}, ${s}%, ${l}%`;
     }
     case "oklch": {
       const { l, c, h } = rgbToOklch(rgb);
-      return `oklch(${l.toFixed(1)}% ${c.toFixed(3)} ${h.toFixed(1)})`;
+      return `${l.toFixed(1)}% ${c.toFixed(3)} ${h.toFixed(1)}`;
     }
   }
 }
