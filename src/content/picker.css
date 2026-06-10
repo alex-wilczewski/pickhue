@@ -84,10 +84,14 @@
 
 .pickhue-loupe__hex {
   color: #f6f6f6;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.02em;
   font-variant-numeric: tabular-nums;
+  max-width: 168px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .pickhue-picker__hint {

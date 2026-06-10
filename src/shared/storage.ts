@@ -1,11 +1,14 @@
 import {
   DEFAULT_SETTINGS,
+  type ColorFormat,
   type LegacySettings,
   type Settings,
   type ThemeMode,
 } from "./types";
 
 const STORAGE_KEY = "pickhue_settings";
+
+const COLOR_FORMATS: ColorFormat[] = ["hex", "rgb", "hsl", "oklch"];
 
 function normalizeThemeMode(stored: LegacySettings | undefined): ThemeMode {
   if (stored?.themeMode) {
@@ -17,6 +20,13 @@ function normalizeThemeMode(stored: LegacySettings | undefined): ThemeMode {
   return DEFAULT_SETTINGS.themeMode;
 }
 
+function normalizeColorFormat(stored: LegacySettings | undefined): ColorFormat {
+  if (stored?.colorFormat && COLOR_FORMATS.includes(stored.colorFormat)) {
+    return stored.colorFormat;
+  }
+  return DEFAULT_SETTINGS.colorFormat;
+}
+
 export async function getSettings(): Promise<Settings> {
   const result = await chrome.storage.sync.get(STORAGE_KEY);
   const stored = result[STORAGE_KEY] as LegacySettings | undefined;
@@ -24,6 +34,7 @@ export async function getSettings(): Promise<Settings> {
     ...DEFAULT_SETTINGS,
     ...stored,
     themeMode: normalizeThemeMode(stored),
+    colorFormat: normalizeColorFormat(stored),
     recentColors: stored?.recentColors ?? DEFAULT_SETTINGS.recentColors,
   };
 }

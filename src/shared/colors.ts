@@ -12,6 +12,12 @@ export interface Hsl {
   l: number;
 }
 
+export interface Oklch {
+  l: number;
+  c: number;
+  h: number;
+}
+
 const HEX_PATTERN = /^#?([0-9a-f]{6})$/i;
 
 export function normalizeHex(input: string): string {
@@ -76,6 +82,46 @@ export function rgbToHsl({ r, g, b }: Rgb): Hsl {
   };
 }
 
+function srgbToLinear(channel: number): number {
+  const value = channel / 255;
+  return value <= 0.04045
+    ? value / 12.92
+    : ((value + 0.055) / 1.055) ** 2.4;
+}
+
+export function rgbToOklch({ r, g, b }: Rgb): Oklch {
+  const lr = srgbToLinear(r);
+  const lg = srgbToLinear(g);
+  const lb = srgbToLinear(b);
+
+  const l = 0.4122214708 * lr + 0.5363325363 * lg + 0.0514459929 * lb;
+  const m = 0.2119034982 * lr + 0.6806995451 * lg + 0.1073969566 * lb;
+  const s = 0.0883024619 * lr + 0.2817188376 * lg + 0.6299787005 * lb;
+
+  const l_ = Math.cbrt(l);
+  const m_ = Math.cbrt(m);
+  const s_ = Math.cbrt(s);
+
+  const okL = 0.2104542553 * l_ + 0.793617785 * m_ - 0.0040720468 * s_;
+  const okA = 1.9779984951 * l_ - 2.428592205 * m_ + 0.4505937099 * s_;
+  const okB = 0.0259040371 * l_ + 0.7827717662 * m_ - 0.808675766 * s_;
+
+  const chroma = Math.sqrt(okA * okA + okB * okB);
+  let hue = (Math.atan2(okB, okA) * 180) / Math.PI;
+  if (hue < 0) {
+    hue += 360;
+  }
+
+  // Achromatic colors have undefined hue in CSS; use 0 for a stable string.
+  const h = chroma < 0.0001 ? 0 : hue;
+
+  return {
+    l: okL * 100,
+    c: chroma,
+    h,
+  };
+}
+
 export function formatColor(hex: string, format: ColorFormat): string {
   const normalized = normalizeHex(hex);
   const rgb = parseHex(normalized);
@@ -88,6 +134,10 @@ export function formatColor(hex: string, format: ColorFormat): string {
     case "hsl": {
       const { h, s, l } = rgbToHsl(rgb);
       return `hsl(${h}, ${s}%, ${l}%)`;
+    }
+    case "oklch": {
+      const { l, c, h } = rgbToOklch(rgb);
+      return `oklch(${l.toFixed(1)}% ${c.toFixed(3)} ${h.toFixed(1)})`;
     }
   }
 }

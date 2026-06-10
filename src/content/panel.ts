@@ -73,6 +73,7 @@ const TEMPLATE = `
           <button type="button" class="format-switcher__btn" data-format="hex" role="radio" aria-checked="true">HEX</button>
           <button type="button" class="format-switcher__btn" data-format="rgb" role="radio" aria-checked="false">RGB</button>
           <button type="button" class="format-switcher__btn" data-format="hsl" role="radio" aria-checked="false">HSL</button>
+          <button type="button" class="format-switcher__btn" data-format="oklch" role="radio" aria-checked="false">OKLCH</button>
         </div>
       </div>
     </section>
@@ -116,6 +117,15 @@ export class PanelController {
       this.applyResolvedTheme();
     }
   };
+  private escapeListenerAttached = false;
+  private readonly onEscapeKey = (event: KeyboardEvent): void => {
+    if (event.key !== "Escape" || !this.isOpen) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    this.hide();
+  };
 
   constructor(private readonly options: PanelOptions) {
     this.hostContext = options.hostContext ?? "content-script";
@@ -125,17 +135,16 @@ export class PanelController {
       if (area !== "sync" || !changes.pickhue_settings) {
         return;
       }
-      const previousLength = this.settings.recentColors.length;
-      this.settings = {
-        ...this.settings,
-        ...(changes.pickhue_settings.newValue as Settings),
-      };
-      if (this.isOpen) {
-        this.renderSettings();
-        this.renderRecentColors(
-          previousLength === 0 && this.settings.recentColors.length > 0
-        );
-      }
+      void (async () => {
+        const previousLength = this.settings.recentColors.length;
+        this.settings = await getSettings();
+        if (this.isOpen) {
+          this.renderSettings();
+          this.renderRecentColors(
+            previousLength === 0 && this.settings.recentColors.length > 0
+          );
+        }
+      })();
     });
   }
 
@@ -165,6 +174,7 @@ export class PanelController {
       this.hadRecentColors = this.settings.recentColors.length > 0;
       this.renderSettings();
       this.renderRecentColors();
+      this.attachEscapeListener();
       requestAnimationFrame(() => this.panelEl?.classList.add("is-open"));
       return;
     }
@@ -174,11 +184,28 @@ export class PanelController {
     this.mount();
     this.renderSettings();
     this.renderRecentColors();
+    this.attachEscapeListener();
     if (this.hostContext === "extension-page") {
       this.panelEl?.classList.add("is-open");
     } else {
       requestAnimationFrame(() => this.panelEl?.classList.add("is-open"));
     }
+  }
+
+  private attachEscapeListener(): void {
+    if (this.escapeListenerAttached) {
+      return;
+    }
+    document.addEventListener("keydown", this.onEscapeKey, true);
+    this.escapeListenerAttached = true;
+  }
+
+  private detachEscapeListener(): void {
+    if (!this.escapeListenerAttached) {
+      return;
+    }
+    document.removeEventListener("keydown", this.onEscapeKey, true);
+    this.escapeListenerAttached = false;
   }
 
   flashCtaMessage(message: string, durationMs = 2200): void {
@@ -195,6 +222,7 @@ export class PanelController {
 
   hide(): void {
     if (this.hostContext === "extension-page") {
+      this.detachEscapeListener();
       window.close();
       return;
     }
@@ -202,6 +230,7 @@ export class PanelController {
     if (!this.host || this.closeTimer) {
       return;
     }
+    this.detachEscapeListener();
     this.panelEl?.classList.remove("is-open");
     const host = this.host;
     this.closeTimer = window.setTimeout(() => {
@@ -224,10 +253,12 @@ export class PanelController {
    */
   hideImmediate(): void {
     if (this.hostContext === "extension-page") {
+      this.detachEscapeListener();
       window.close();
       return;
     }
 
+    this.detachEscapeListener();
     if (this.closeTimer) {
       window.clearTimeout(this.closeTimer);
       this.closeTimer = 0;
@@ -449,12 +480,13 @@ export class PanelController {
   }
 
   private async updateColorFormat(format: ColorFormat): Promise<void> {
-    if (!format) {
+    if (!format || format === this.settings.colorFormat) {
       return;
     }
-    this.settings = await saveSettings({ colorFormat: format });
+    this.settings = { ...this.settings, colorFormat: format };
     this.renderSettings();
     this.renderRecentColors();
+    this.settings = await saveSettings({ colorFormat: format });
   }
 
   private async handleSwatchClick(hex: string): Promise<void> {

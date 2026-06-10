@@ -41,10 +41,13 @@ if (!(globalThis as Record<string, unknown>)[LOADED_FLAG]) {
     await picker.start();
   }
 
-  // When the eyedropper closes (pick, Esc, or cancel) bring the panel back so
-  // the freshly picked color is visible at the front of Recent Colors.
-  picker.onClose = () => {
-    void panel.show();
+  picker.onClose = (reason) => {
+    if (reason === "pick") {
+      // Reopen so the freshly picked color is visible at the front of recents.
+      void panel.show();
+      return;
+    }
+    // Esc dismisses the whole extension, not back to the panel.
   };
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {

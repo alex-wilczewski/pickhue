@@ -7,14 +7,20 @@ const PICKER_ID = "pickhue-picker-root";
 const TOAST_ID = "pickhue-copy-toast";
 const LOUPE_SIZE = 144;
 const SAMPLE = 11;
+const ZOOM_MIN = 0.4;
+const ZOOM_MAX = 1.75;
+const ZOOM_DEFAULT = 1;
+const ZOOM_WHEEL_SENSITIVITY = 0.001;
 
 interface CaptureResponse {
   dataUrl?: string;
 }
 
+export type PickerCloseReason = "pick" | "cancel";
+
 export class EyedropperOverlay {
-  /** Invoked whenever the picker stops (pick, Esc, or cancel). */
-  onClose?: () => void;
+  /** Invoked whenever the picker stops. `pick` = color chosen; `cancel` = Esc. */
+  onClose?: (reason: PickerCloseReason) => void;
 
   private root: HTMLDivElement | null = null;
   private canvas: HTMLCanvasElement | null = null;
@@ -32,13 +38,25 @@ export class EyedropperOverlay {
   private rafId = 0;
   private hasPointer = false;
   private colorFormat: ColorFormat = "hex";
+  private zoom = ZOOM_DEFAULT;
+  private hint: HTMLParagraphElement | null = null;
 
   private onKeyDown = (event: KeyboardEvent): void => {
     if (event.key === "Escape") {
       event.preventDefault();
       event.stopPropagation();
-      this.stop();
+      this.stop("cancel");
     }
+  };
+
+  private onWheel = (event: WheelEvent): void => {
+    if (!this.active) {
+      return;
+    }
+    event.preventDefault();
+    const next = this.zoom - event.deltaY * ZOOM_WHEEL_SENSITIVITY;
+    this.zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, next));
+    this.updateHint();
   };
 
   async start(): Promise<void> {
@@ -71,11 +89,13 @@ export class EyedropperOverlay {
     this.scale = image.width / window.innerWidth;
     this.active = true;
     this.hasPointer = false;
+    this.zoom = ZOOM_DEFAULT;
     this.mount();
     document.addEventListener("keydown", this.onKeyDown, true);
+    window.addEventListener("wheel", this.onWheel, { capture: true, passive: false });
   }
 
-  stop(): void {
+  stop(reason: PickerCloseReason = "cancel"): void {
     if (!this.active) {
       return;
     }
@@ -83,6 +103,7 @@ export class EyedropperOverlay {
     this.active = false;
     cancelAnimationFrame(this.rafId);
     document.removeEventListener("keydown", this.onKeyDown, true);
+    window.removeEventListener("wheel", this.onWheel, true);
     window.removeEventListener("mousemove", this.handleMove, true);
     window.removeEventListener("click", this.handleClick, true);
     this.root?.remove();
@@ -91,8 +112,10 @@ export class EyedropperOverlay {
     this.ctx = null;
     this.loupe = null;
     this.lensCtx = null;
+    this.hint = null;
     this.hasPointer = false;
-    this.onClose?.();
+    this.zoom = ZOOM_DEFAULT;
+    this.onClose?.(reason);
   }
 
   private mount(): void {
@@ -130,7 +153,11 @@ export class EyedropperOverlay {
     info.append(this.swatchDot, this.hexLabel);
     this.loupe.append(glass, info);
 
-    this.root.append(this.loupe);
+    this.hint = document.createElement("p");
+    this.hint.className = "pickhue-picker__hint";
+    this.updateHint();
+
+    this.root.append(this.loupe, this.hint);
     document.documentElement.append(this.root);
 
     // Listen on window (capture) rather than the overlay root: it is immune to
@@ -176,9 +203,20 @@ export class EyedropperOverlay {
 
     const hex = this.sampleAt(this.pointerX, this.pointerY);
     if (hex && this.hexLabel && this.swatchDot) {
-      this.hexLabel.textContent = hex;
+      this.hexLabel.textContent = formatColor(hex, this.colorFormat);
       this.swatchDot.style.backgroundColor = hex;
     }
+  }
+
+  private updateHint(): void {
+    if (!this.hint) {
+      return;
+    }
+    const zoomPct = Math.round(this.zoom * 100);
+    this.hint.innerHTML =
+      zoomPct === 100
+        ? "<b>Scroll</b> to zoom &middot; <b>Click</b> to pick &middot; <b>Esc</b> to close"
+        : `<b>Scroll</b> to zoom &middot; <b>${zoomPct}%</b> &middot; <b>Click</b> to pick &middot; <b>Esc</b> to close`;
   }
 
   private handleClick = (event: MouseEvent): void => {
@@ -200,7 +238,7 @@ export class EyedropperOverlay {
     const formatted = formatColor(hex, this.colorFormat);
     copyText(formatted);
     chrome.runtime.sendMessage({ type: "COLOR_PICKED", hex });
-    this.stop();
+    this.stop("pick");
     showCopyToast(formatted, hex);
   };
 
@@ -212,15 +250,17 @@ export class EyedropperOverlay {
 
     const px = Math.round(this.pointerX * this.scale);
     const py = Math.round(this.pointerY * this.scale);
-    const half = Math.floor(SAMPLE / 2);
+    const center = (SAMPLE - 1) / 2;
     const cell = LOUPE_SIZE / SAMPLE;
 
     lensCtx.clearRect(0, 0, LOUPE_SIZE, LOUPE_SIZE);
-    lensCtx.imageSmoothingEnabled = false;
+    lensCtx.imageSmoothingEnabled = this.zoom < 1;
 
     for (let row = 0; row < SAMPLE; row += 1) {
       for (let col = 0; col < SAMPLE; col += 1) {
-        const hex = this.readHex(px + col - half, py + row - half);
+        const offsetX = Math.round((col - center) / this.zoom);
+        const offsetY = Math.round((row - center) / this.zoom);
+        const hex = this.readHex(px + offsetX, py + offsetY);
         lensCtx.fillStyle = hex ?? "rgba(0,0,0,0)";
         lensCtx.fillRect(
           Math.floor(col * cell),
