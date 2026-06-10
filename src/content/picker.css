@@ -122,6 +122,8 @@
   z-index: 2147483647;
   transform: translate(-50%, 12px);
   opacity: 0;
+  width: max-content;
+  max-width: calc(100% - 40px);
   min-height: 48px;
   padding: 10px 16px;
   border-radius: 14px;
@@ -150,4 +152,11 @@
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.18);
   flex-shrink: 0;
+}
+
+.pickhue-copy-toast__text {
+  line-height: 1.25;
+  min-width: 0;
+  text-align: left;
+  overflow-wrap: anywhere;
 }
