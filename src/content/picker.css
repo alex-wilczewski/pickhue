@@ -28,6 +28,11 @@
   transition: opacity 0.12s ease;
 }
 
+#pickhue-picker-root.is-recapturing .pickhue-loupe,
+#pickhue-picker-root.is-recapturing .pickhue-picker__hint {
+  visibility: hidden;
+}
+
 .pickhue-loupe__glass {
   position: relative;
   width: 144px;
