@@ -7,6 +7,38 @@ export interface PaletteMenuCallbacks {
 }
 
 const MENU_CLASS = "palette-menu";
+const MENU_GAP = 6;
+
+function positionMenuInPanel(
+  menu: HTMLElement,
+  anchorRect: DOMRect,
+  panelRect: DOMRect,
+  options?: { alignRight?: boolean }
+): void {
+  const menuWidth = menu.offsetWidth;
+  const menuHeight = menu.offsetHeight;
+  const panelWidth = panelRect.width;
+  const panelHeight = panelRect.height;
+
+  const preferredLeft = options?.alignRight
+    ? anchorRect.right - panelRect.left - menuWidth
+    : anchorRect.left - panelRect.left;
+  const maxLeft = Math.max(8, panelWidth - menuWidth - 8);
+  const left = Math.min(Math.max(8, preferredLeft), maxLeft);
+
+  const belowTop = anchorRect.bottom - panelRect.top + MENU_GAP;
+  const aboveTop = anchorRect.top - panelRect.top - menuHeight - MENU_GAP;
+  const maxTop = Math.max(8, panelHeight - menuHeight - 8);
+  const top =
+    belowTop + menuHeight <= panelHeight - 8
+      ? belowTop
+      : aboveTop >= 8
+        ? aboveTop
+        : Math.min(Math.max(8, belowTop), maxTop);
+
+  menu.style.left = `${left}px`;
+  menu.style.top = `${top}px`;
+}
 
 export function showPaletteMenu(
   root: Document | ShadowRoot,
@@ -71,8 +103,9 @@ export function showPaletteMenu(
     panel.append(menu);
     const anchorRect = anchor.getBoundingClientRect();
     const panelRect = panel.getBoundingClientRect();
-    menu.style.left = `${anchorRect.left - panelRect.left}px`;
-    menu.style.top = `${anchorRect.bottom - panelRect.top + 6}px`;
+    requestAnimationFrame(() => {
+      positionMenuInPanel(menu, anchorRect, panelRect);
+    });
   } else {
     document.body.append(menu);
     const rect = anchor.getBoundingClientRect();
@@ -146,13 +179,8 @@ export function showActionMenu(
     panel.append(menu);
     const anchorRect = anchor.getBoundingClientRect();
     const panelRect = panel.getBoundingClientRect();
-    menu.style.top = `${anchorRect.bottom - panelRect.top + 6}px`;
     requestAnimationFrame(() => {
-      const menuWidth = menu.offsetWidth;
-      menu.style.left = `${Math.max(
-        8,
-        anchorRect.right - panelRect.left - menuWidth
-      )}px`;
+      positionMenuInPanel(menu, anchorRect, panelRect, { alignRight: true });
     });
   } else {
     document.body.append(menu);

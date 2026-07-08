@@ -1,5 +1,5 @@
 /** Thin-stroke plus mark aligned with panel icon stroke weight. */
 export const PLUS_ICON_HTML = `<svg class="icon icon--plus" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path d="M8 3.25v9.5M3.25 8h9.5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/></svg>`;
 
-/** Horizontal more menu icon aligned with settings control stroke weight. */
-export const MORE_ICON_HTML = `<svg class="icon icon--more" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="4" cy="8" r="1.25" fill="currentColor"/><circle cx="8" cy="8" r="1.25" fill="currentColor"/><circle cx="12" cy="8" r="1.25" fill="currentColor"/></svg>`;
+/** Compact gear icon for palette row actions. */
+export const SETTINGS_ICON_HTML = `<svg class="icon icon--settings" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M6.94 1.95h2.12l.28 1.42c.26.08.51.18.75.31l1.26-.7 1.5 1.5-.7 1.26c.13.24.23.49.31.75l1.42.28v2.12l-1.42.28a4.7 4.7 0 0 1-.31.75l.7 1.26-1.5 1.5-1.26-.7c-.24.13-.49.23-.75.31l-.28 1.42H6.94l-.28-1.42a4.7 4.7 0 0 1-.75-.31l-1.26.7-1.5-1.5.7-1.26a4.7 4.7 0 0 1-.31-.75l-1.42-.28V6.94l1.42-.28c.08-.26.18-.51.31-.75l-.7-1.26 1.5-1.5 1.26.7c.24-.13.49-.23.75-.31l.28-1.42Z" fill="none" stroke="currentColor" stroke-width="1.15" stroke-linejoin="round"/><circle cx="8" cy="8" r="2.1" fill="none" stroke="currentColor" stroke-width="1.15"/></svg>`;

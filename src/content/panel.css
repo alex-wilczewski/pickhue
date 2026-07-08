@@ -420,7 +420,7 @@ button {
   padding: 4px;
   min-height: 0;
   border-radius: 10px;
-  background: var(--swatch-track);
+  background-color: var(--swatch-track);
   box-sizing: border-box;
 }
 
@@ -508,6 +508,8 @@ button {
   min-width: 29px;
   height: 29px;
   padding: 0;
+  border-color: transparent;
+  background: transparent;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -516,15 +518,20 @@ button {
   flex-shrink: 0;
 }
 
+.panel__palette-menu-btn:hover {
+  background: var(--menu-bg);
+  border-color: var(--control-border);
+}
+
 .panel__palette-menu-btn--hidden {
   visibility: hidden;
   pointer-events: none;
 }
 
-.panel__palette-menu-btn .icon--more {
+.panel__palette-menu-btn .icon--settings {
   display: block;
-  width: 14px;
-  height: 14px;
+  width: 13px;
+  height: 13px;
   flex-shrink: 0;
 }
 
@@ -1232,8 +1239,8 @@ button {
 }
 
 .format-switcher__btn {
-  min-width: 27px;
-  padding: 0 3px;
+  min-width: 29px;
+  padding: 0 5px;
   font-size: 10.5px;
   font-weight: 500;
   letter-spacing: 0.01em;

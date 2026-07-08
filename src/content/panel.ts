@@ -1,5 +1,5 @@
 import panelCss from "./panel.css?inline";
-import { MORE_ICON_HTML } from "./icons";
+import { SETTINGS_ICON_HTML } from "./icons";
 import { PaletteEditorView } from "./palette-editor";
 import { showActionMenu } from "./palette-menu";
 import { copyText } from "../shared/clipboard";
@@ -1231,7 +1231,7 @@ export class PanelController {
     menuBtn.type = "button";
     menuBtn.className = "panel__palette-btn panel__palette-menu-btn";
     menuBtn.setAttribute("aria-label", `Actions for ${palette.name}`);
-    menuBtn.innerHTML = MORE_ICON_HTML;
+    menuBtn.innerHTML = SETTINGS_ICON_HTML;
     menuBtn.addEventListener("click", (event) => {
       event.stopPropagation();
       this.showPaletteRowMenu(menuBtn, palette);
