@@ -1,13 +1,32 @@
 import panelCss from "./panel.css?inline";
+import { MORE_ICON_HTML } from "./icons";
+import { PaletteEditorView } from "./palette-editor";
+import { showActionMenu } from "./palette-menu";
 import { copyText } from "../shared/clipboard";
 import { formatColor } from "../shared/colors";
-import { addRecentColor, getSettings, saveSettings } from "../shared/storage";
+import {
+  exportPalettesAseFile,
+  exportPalettesHexList,
+  exportPaletteAseFile,
+} from "../shared/palette-formats";
+import { exportPalettes, importPalettes, importPalettesFromAse } from "../shared/palette-io";
+import {
+  addColorsToPalette,
+  addRecentColor,
+  createPalette,
+  deletePalette,
+  getPalettes,
+  getSettings,
+  saveSettings,
+  StorageQuotaError,
+} from "../shared/storage";
 import { resolveTheme } from "../shared/theme";
-import type { ColorFormat, Settings, ThemeMode } from "../shared/types";
+import type { ColorFormat, ColorPalette, Settings, ThemeMode } from "../shared/types";
 
 const HOST_ID = "pickhue-panel-host";
 const PANEL_STYLES_ID = "pickhue-panel-styles";
 const CLOSE_ANIM_MS = 180;
+const PALETTE_PREVIEW_COUNT = 5;
 
 /** Strip :host reset — it must not run against popup page roots. */
 function panelCssForPage(css: string): string {
@@ -31,56 +50,111 @@ const TEMPLATE = `
       </button>
     </header>
 
-    <section class="panel__section panel__section--recent">
-      <h2 class="panel__label">Recent Colors</h2>
-      <div class="panel__swatches-wrap">
-        <p class="panel__swatches-empty" data-ref="empty">Colors you select go here.</p>
-        <div class="panel__swatches" role="list" data-ref="scroller">
-          <div class="panel__swatches-inner" data-ref="track"></div>
-        </div>
-      </div>
-    </section>
+    <div class="panel__body" data-ref="body">
+      <div class="panel__view panel__view--home" data-ref="home-view">
+        <section class="panel__section panel__section--recent">
+          <div class="panel__section-head">
+            <h2 class="panel__label">Recent Colors</h2>
+            <button type="button" class="panel__section-action" data-ref="select-mode-toggle" hidden>
+              Save to palette
+            </button>
+          </div>
+          <div class="panel__swatches-wrap">
+            <p class="panel__swatches-empty" data-ref="empty">Colors you select go here.</p>
+            <div class="panel__swatches" role="list" data-ref="scroller">
+              <div class="panel__swatches-inner" data-ref="track"></div>
+            </div>
+          </div>
+        </section>
 
-    <section class="panel__section panel__section--settings">
-      <h2 class="panel__label">Extension Settings</h2>
+        <section class="panel__section panel__section--palettes">
+          <div class="panel__section-head">
+            <h2 class="panel__label">Saved Palettes</h2>
+            <button type="button" class="panel__section-action" data-ref="new-palette">
+              New palette
+            </button>
+          </div>
+          <div class="panel__palettes" data-ref="palette-list"></div>
+        </section>
 
-      <div class="panel__setting">
-        <span class="panel__setting-label">Theme</span>
-        <div class="theme-switcher" role="radiogroup" aria-label="Theme" data-ref="theme-switcher">
-          <button type="button" class="theme-switcher__btn" data-theme-mode="system" role="radio" aria-checked="false" aria-label="System theme">
-            <svg class="icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
-              <rect x="4" y="6" width="16" height="10" rx="2" stroke="currentColor" stroke-width="2" fill="none"/>
-              <path d="M9 19h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-            </svg>
-          </button>
-          <button type="button" class="theme-switcher__btn" data-theme-mode="light" role="radio" aria-checked="false" aria-label="Light theme">
-            <svg class="icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
-              <circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2" fill="none"/>
-              <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-            </svg>
-          </button>
-          <button type="button" class="theme-switcher__btn" data-theme-mode="dark" role="radio" aria-checked="false" aria-label="Dark theme">
-            <svg class="icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
-              <path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9Z" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          </button>
-        </div>
+        <section class="panel__section panel__section--settings">
+          <h2 class="panel__label">Extension Settings</h2>
+
+          <div class="panel__setting">
+            <span class="panel__setting-label">Theme</span>
+            <div class="theme-switcher" role="radiogroup" aria-label="Theme" data-ref="theme-switcher">
+              <button type="button" class="theme-switcher__btn" data-theme-mode="system" role="radio" aria-checked="false" aria-label="System theme">
+                <svg class="icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+                  <rect x="4" y="6" width="16" height="10" rx="2" stroke="currentColor" stroke-width="2" fill="none"/>
+                  <path d="M9 19h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+              </button>
+              <button type="button" class="theme-switcher__btn" data-theme-mode="light" role="radio" aria-checked="false" aria-label="Light theme">
+                <svg class="icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+                  <circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2" fill="none"/>
+                  <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+              </button>
+              <button type="button" class="theme-switcher__btn" data-theme-mode="dark" role="radio" aria-checked="false" aria-label="Dark theme">
+                <svg class="icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+                  <path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9Z" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="panel__setting">
+            <span class="panel__setting-label">Format</span>
+            <div class="format-switcher" role="radiogroup" aria-label="Format" data-ref="format-switcher">
+              <button type="button" class="format-switcher__btn" data-format="hex" role="radio" aria-checked="true">HEX</button>
+              <button type="button" class="format-switcher__btn" data-format="rgb" role="radio" aria-checked="false">RGB</button>
+              <button type="button" class="format-switcher__btn" data-format="hsl" role="radio" aria-checked="false">HSL</button>
+              <button type="button" class="format-switcher__btn" data-format="oklch" role="radio" aria-checked="false">OKLCH</button>
+            </div>
+          </div>
+
+          <div class="panel__setting">
+            <span class="panel__setting-label">Palettes</span>
+            <div class="panel__setting-actions">
+              <button type="button" class="panel__palette-btn" data-ref="export-palettes">Export All</button>
+              <button type="button" class="panel__palette-btn" data-ref="import-palettes">Import</button>
+            </div>
+          </div>
+        </section>
       </div>
 
-      <div class="panel__setting">
-        <span class="panel__setting-label">Format</span>
-        <div class="format-switcher" role="radiogroup" aria-label="Format" data-ref="format-switcher">
-          <button type="button" class="format-switcher__btn" data-format="hex" role="radio" aria-checked="true">HEX</button>
-          <button type="button" class="format-switcher__btn" data-format="rgb" role="radio" aria-checked="false">RGB</button>
-          <button type="button" class="format-switcher__btn" data-format="hsl" role="radio" aria-checked="false">HSL</button>
-          <button type="button" class="format-switcher__btn" data-format="oklch" role="radio" aria-checked="false">OKLCH</button>
-        </div>
+      <div class="panel__view panel__view--editor" data-ref="editor-view" hidden>
+        <div data-ref="editor-container"></div>
       </div>
-    </section>
+    </div>
 
     <footer class="panel__footer">
       <button class="panel__cta" type="button" data-ref="select-color">Select Color</button>
     </footer>
+
+    <div class="panel__import" data-ref="import-dialog" hidden>
+      <div class="panel__import-dialog" role="dialog" aria-label="Import palettes">
+        <p class="panel__import-title">Import palettes</p>
+        <p class="panel__import-hint">Adobe .ase, CSS variables, hex list, or PickHue JSON</p>
+        <label class="panel__import-file">
+          <input type="file" accept=".ase,.css,.json,text/plain" data-ref="import-file" hidden>
+          <span class="panel__file-btn">
+            <svg class="icon panel__file-btn-icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+              <path d="M12 15V5m0 0-4 4m4-4 4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+              <path d="M5 19h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/>
+              <path d="M5 19a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/>
+            </svg>
+            Choose File
+          </span>
+        </label>
+        <textarea class="panel__import-input" data-ref="import-input" rows="4" placeholder="Or paste palette data here"></textarea>
+        <div class="panel__import-actions">
+          <button type="button" class="panel__modal-btn" data-ref="import-cancel">Cancel</button>
+          <button type="button" class="panel__modal-btn" data-ref="import-merge">Merge</button>
+          <button type="button" class="panel__modal-btn panel__modal-btn--accent" data-ref="import-replace">Replace</button>
+        </div>
+      </div>
+    </div>
 
     <div class="toast" role="status" aria-live="polite" data-ref="toast" hidden>
       <span class="toast__swatch" data-ref="toast-swatch"></span>
@@ -90,10 +164,15 @@ const TEMPLATE = `
 `;
 
 type HostContext = "content-script" | "extension-page";
+type PanelView = "home" | "editor";
+
+export interface StartPickerOptions {
+  paletteId?: string;
+}
 
 interface PanelOptions {
   hostContext?: HostContext;
-  onStartPicker: () => void;
+  onStartPicker: (options?: StartPickerOptions) => void;
 }
 
 export class PanelController {
@@ -108,7 +187,15 @@ export class PanelController {
     colorFormat: "hex",
     recentColors: [],
   };
+  private palettes: ColorPalette[] = [];
   private hadRecentColors = false;
+  private view: PanelView = "home";
+  private selectionMode = false;
+  private selectedPaletteId: string | null = null;
+  private readonly selectedRecents = new Set<string>();
+  private editor: PaletteEditorView | null = null;
+  private reopenEditorAfterPick = false;
+  private hostResizeObserver: ResizeObserver | null = null;
   private readonly systemThemeQuery = window.matchMedia(
     "(prefers-color-scheme: dark)"
   );
@@ -118,8 +205,88 @@ export class PanelController {
     }
   };
   private escapeListenerAttached = false;
+  private readonly onEditorEnterKey = (event: KeyboardEvent): void => {
+    if (event.key !== "Enter" || !this.isOpen || this.view !== "editor") {
+      return;
+    }
+    if (
+      this.getRoot().querySelector(
+        ".palette-editor__confirm-overlay, .palette-editor__recents-overlay"
+      )
+    ) {
+      return;
+    }
+
+    const active = this.getFocusedElement();
+    const root = this.getRoot();
+    const focusedInPanel =
+      active instanceof Node &&
+      (root instanceof ShadowRoot
+        ? root.contains(active)
+        : this.panelEl?.contains(active));
+
+    if (!active || !focusedInPanel) {
+      return;
+    }
+
+    if (active.classList.contains("palette-editor__paste-input")) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopImmediatePropagation();
+
+    if (active.classList.contains("palette-editor__name")) {
+      void this.editor?.commitTitle();
+    }
+  };
   private readonly onEscapeKey = (event: KeyboardEvent): void => {
     if (event.key !== "Escape" || !this.isOpen) {
+      return;
+    }
+    if (this.ref<HTMLElement>("import-dialog")?.hidden === false) {
+      event.preventDefault();
+      event.stopPropagation();
+      this.hideImportDialog();
+      return;
+    }
+    const saveConfirm = this.getRoot().querySelector(
+      ".panel__save-palette-confirm-overlay"
+    );
+    if (saveConfirm) {
+      event.preventDefault();
+      event.stopPropagation();
+      this.dismissSavePaletteConfirm();
+      return;
+    }
+    if (this.view === "editor") {
+      const editorOverlay = this.getRoot().querySelector(
+        ".palette-editor__confirm-overlay, .palette-editor__recents-overlay"
+      );
+      if (editorOverlay) {
+        event.preventDefault();
+        event.stopPropagation();
+        editorOverlay.remove();
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      void this.editor?.handleBack();
+      return;
+    }
+    const homeConfirmOverlay = this.getRoot().querySelector(
+      ".palette-editor__confirm-overlay"
+    );
+    if (homeConfirmOverlay) {
+      event.preventDefault();
+      event.stopPropagation();
+      homeConfirmOverlay.remove();
+      return;
+    }
+    if (this.selectionMode) {
+      event.preventDefault();
+      event.stopPropagation();
+      this.setSelectionMode(false);
       return;
     }
     event.preventDefault();
@@ -132,17 +299,39 @@ export class PanelController {
     this.systemThemeQuery.addEventListener("change", this.onSystemThemeChange);
 
     chrome.storage.onChanged.addListener((changes, area) => {
-      if (area !== "sync" || !changes.pickhue_settings) {
+      if (area !== "sync") {
         return;
       }
       void (async () => {
+        const settingsChanged = Boolean(changes.pickhue_settings);
+        const palettesChanged = Boolean(changes.pickhue_palettes);
+        if (!settingsChanged && !palettesChanged) {
+          return;
+        }
+
         const previousLength = this.settings.recentColors.length;
-        this.settings = await getSettings();
-        if (this.isOpen) {
+        if (settingsChanged) {
+          this.settings = await getSettings();
+        }
+        if (palettesChanged) {
+          this.palettes = await getPalettes();
+        }
+
+        if (!this.isOpen) {
+          return;
+        }
+
+        if (settingsChanged) {
           this.renderSettings();
           this.renderRecentColors(
             previousLength === 0 && this.settings.recentColors.length > 0
           );
+        }
+        if (palettesChanged) {
+          this.renderPalettes();
+          if (this.view === "editor") {
+            await this.editor?.refreshFromStorage();
+          }
         }
       })();
     });
@@ -152,7 +341,11 @@ export class PanelController {
     if (this.hostContext === "extension-page") {
       return this.panelEl !== null;
     }
-    return this.host !== null && this.closeTimer === 0;
+    return (
+      this.host !== null &&
+      this.closeTimer === 0 &&
+      this.host.style.display !== "none"
+    );
   }
 
   async toggle(): Promise<void> {
@@ -168,44 +361,50 @@ export class PanelController {
       window.clearTimeout(this.closeTimer);
       this.closeTimer = 0;
     }
+    await this.refreshData();
+
     if (this.host) {
-      // Already mounted (e.g. reopened after a pick) — just refresh + animate.
-      this.settings = await getSettings();
-      this.hadRecentColors = this.settings.recentColors.length > 0;
-      this.renderSettings();
-      this.renderRecentColors();
+      this.host.style.display = "block";
+      if (this.reopenEditorAfterPick) {
+        this.reopenEditorAfterPick = false;
+        this.showView("editor");
+        await this.editor?.refreshFromStorage();
+      } else {
+        this.renderAll();
+      }
       this.attachEscapeListener();
-      requestAnimationFrame(() => this.panelEl?.classList.add("is-open"));
+      requestAnimationFrame(() => {
+        this.panelEl?.classList.add("is-open");
+        this.scheduleHostSize();
+      });
       return;
     }
 
-    this.settings = await getSettings();
-    this.hadRecentColors = this.settings.recentColors.length > 0;
     this.mount();
-    this.renderSettings();
-    this.renderRecentColors();
+    this.renderAll();
     this.attachEscapeListener();
     if (this.hostContext === "extension-page") {
       this.panelEl?.classList.add("is-open");
     } else {
-      requestAnimationFrame(() => this.panelEl?.classList.add("is-open"));
+      requestAnimationFrame(() => {
+        this.panelEl?.classList.add("is-open");
+        this.scheduleHostSize();
+      });
     }
   }
 
-  private attachEscapeListener(): void {
-    if (this.escapeListenerAttached) {
-      return;
+  async handlePickedColorForPalette(hex: string, paletteId: string): Promise<void> {
+    if (this.editor?.getPaletteId() === paletteId) {
+      await this.editor.appendPickedColor(hex);
+    } else {
+      try {
+        await addColorsToPalette(paletteId, [hex]);
+        this.palettes = await getPalettes();
+      } catch (error) {
+        this.handleStorageError(error);
+      }
     }
-    document.addEventListener("keydown", this.onEscapeKey, true);
-    this.escapeListenerAttached = true;
-  }
-
-  private detachEscapeListener(): void {
-    if (!this.escapeListenerAttached) {
-      return;
-    }
-    document.removeEventListener("keydown", this.onEscapeKey, true);
-    this.escapeListenerAttached = false;
+    this.reopenEditorAfterPick = true;
   }
 
   flashCtaMessage(message: string, durationMs = 2200): void {
@@ -217,6 +416,7 @@ export class PanelController {
     button.textContent = message;
     window.setTimeout(() => {
       button.textContent = original;
+      this.updateFooterCta();
     }, durationMs);
   }
 
@@ -231,6 +431,8 @@ export class PanelController {
       return;
     }
     this.detachEscapeListener();
+    this.detachHostResizeObserver();
+    this.setSelectionMode(false);
     this.panelEl?.classList.remove("is-open");
     const host = this.host;
     this.closeTimer = window.setTimeout(() => {
@@ -239,18 +441,13 @@ export class PanelController {
         this.host = null;
         this.shadow = null;
         this.panelEl = null;
+        this.editor = null;
+        this.view = "home";
       }
       this.closeTimer = 0;
     }, CLOSE_ANIM_MS);
   }
 
-  /**
-   * Tear the panel out of the DOM immediately, with no close animation. Used
-   * right before starting the eyedropper: `captureVisibleTab` snapshots the page
-   * synchronously, so the panel host must be gone (and the page repainted)
-   * before capture, otherwise the magnifier samples a screenshot that still
-   * contains the panel.
-   */
   hideImmediate(): void {
     if (this.hostContext === "extension-page") {
       this.detachEscapeListener();
@@ -259,14 +456,97 @@ export class PanelController {
     }
 
     this.detachEscapeListener();
-    if (this.closeTimer) {
-      window.clearTimeout(this.closeTimer);
-      this.closeTimer = 0;
+    if (this.host) {
+      this.host.style.display = "none";
     }
-    this.host?.remove();
-    this.host = null;
-    this.shadow = null;
-    this.panelEl = null;
+  }
+
+  private async refreshData(): Promise<void> {
+    this.settings = await getSettings();
+    this.palettes = await getPalettes();
+    this.hadRecentColors = this.settings.recentColors.length > 0;
+  }
+
+  private renderAll(): void {
+    this.renderSettings();
+    this.renderRecentColors();
+    this.renderPalettes();
+    this.updateSelectionToggle();
+    this.updateFooterCta();
+    if (this.view === "editor" && this.editor) {
+      this.showView("editor");
+    } else {
+      this.showView("home");
+    }
+    this.scheduleHostSize();
+  }
+
+  private attachHostResizeObserver(): void {
+    if (!this.host || !this.panelEl || this.hostResizeObserver) {
+      return;
+    }
+
+    this.hostResizeObserver = new ResizeObserver(() => {
+      this.scheduleHostSize();
+    });
+    this.hostResizeObserver.observe(this.panelEl);
+  }
+
+  private detachHostResizeObserver(): void {
+    this.hostResizeObserver?.disconnect();
+    this.hostResizeObserver = null;
+  }
+
+  private scheduleHostSize(): void {
+    if (this.hostContext === "extension-page") {
+      return;
+    }
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => this.syncHostSize());
+    });
+  }
+
+  private syncHostSize(): void {
+    if (!this.host || !this.panelEl || this.hostContext === "extension-page") {
+      return;
+    }
+
+    // scrollHeight reflects full content even when the host is too short.
+    const height = Math.ceil(this.panelEl.scrollHeight);
+    if (height <= 0) {
+      return;
+    }
+
+    const next = `${height}px`;
+    if (this.host.style.height !== next) {
+      this.host.style.height = next;
+    }
+  }
+
+  private attachEscapeListener(): void {
+    if (this.escapeListenerAttached) {
+      return;
+    }
+    document.addEventListener("keydown", this.onEscapeKey, true);
+    document.addEventListener("keydown", this.onEditorEnterKey, true);
+    this.escapeListenerAttached = true;
+  }
+
+  private detachEscapeListener(): void {
+    if (!this.escapeListenerAttached) {
+      return;
+    }
+    document.removeEventListener("keydown", this.onEscapeKey, true);
+    document.removeEventListener("keydown", this.onEditorEnterKey, true);
+    this.escapeListenerAttached = false;
+  }
+
+  private getFocusedElement(): Element | null {
+    const root = this.getRoot();
+    if (root instanceof ShadowRoot) {
+      return root.activeElement;
+    }
+    return document.activeElement;
   }
 
   private mount(): void {
@@ -278,18 +558,22 @@ export class PanelController {
     this.host = document.createElement("div");
     this.host.id = HOST_ID;
     this.host.style.cssText =
-      "position:fixed;top:16px;right:16px;width:320px;height:378px;z-index:2147483646;margin:0;padding:0;";
+      "position:fixed;top:16px;right:16px;width:320px;z-index:2147483646;margin:0;padding:0;display:block;overflow:visible;height:auto;";
 
     this.shadow = this.host.attachShadow({ mode: "open" });
     const style = document.createElement("style");
     style.textContent = panelCss;
     const wrapper = document.createElement("div");
+    wrapper.className = "panel-mount";
     wrapper.innerHTML = TEMPLATE;
     this.shadow.append(style, wrapper);
     document.documentElement.append(this.host);
 
-    this.panelEl = this.ref<HTMLElement>("panel") ?? this.shadow.querySelector(".panel");
+    this.panelEl =
+      this.ref<HTMLElement>("panel") ?? this.shadow.querySelector(".panel");
+    this.initEditor();
     this.bindEvents();
+    this.attachHostResizeObserver();
   }
 
   private mountExtensionPage(): void {
@@ -308,7 +592,27 @@ export class PanelController {
     if (this.panelEl) {
       document.body.append(this.panelEl);
     }
+    this.initEditor();
     this.bindEvents();
+  }
+
+  private initEditor(): void {
+    const container = this.ref<HTMLElement>("editor-container");
+    if (!container) {
+      return;
+    }
+    this.editor = new PaletteEditorView(container, {
+      onBack: () => this.showView("home"),
+      onToast: (message, hex) => this.showToast(message, hex),
+      onPaletteChanged: () => {
+        void getPalettes().then((palettes) => {
+          this.palettes = palettes;
+          this.renderPalettes();
+          this.scheduleHostSize();
+        });
+      },
+      onLayoutChange: () => this.scheduleHostSize(),
+    });
   }
 
   private ref<T extends Element>(name: string): T | null {
@@ -316,84 +620,176 @@ export class PanelController {
     return root.querySelector<T>(`[data-ref="${name}"]`) ?? null;
   }
 
+  private getRoot(): Document | ShadowRoot {
+    return this.shadow ?? document;
+  }
+
   private bindEvents(): void {
+    const stopKeys = (event: Event) => {
+      event.stopPropagation();
+    };
+    const mount =
+      this.shadow?.querySelector(".panel-mount") ??
+      this.panelEl?.querySelector(".panel-mount") ??
+      this.panelEl;
+    mount?.addEventListener("keydown", stopKeys);
+    mount?.addEventListener("keyup", stopKeys);
+
     this.ref<HTMLButtonElement>("select-color")?.addEventListener("click", () => {
+      if (this.selectionMode) {
+        this.setSelectionMode(false);
+        return;
+      }
+      if (this.view === "editor") {
+        const paletteId = this.editor?.getPaletteId();
+        if (paletteId) {
+          this.reopenEditorAfterPick = true;
+          this.options.onStartPicker({ paletteId });
+        }
+        return;
+      }
       this.options.onStartPicker();
     });
 
     this.ref<HTMLButtonElement>("close")?.addEventListener("click", () => {
+      if (this.view === "editor") {
+        void this.editor?.handleBack();
+        return;
+      }
       this.hide();
     });
 
-    // Translate vertical wheel into horizontal scroll while hovering the recent
-    // colors row (Chromium doesn't do this automatically for inner elements).
-    const scroller = this.ref<HTMLElement>("scroller");
-    const track = this.ref<HTMLElement>("track");
-    if (scroller && track) {
-      let targetScroll = 0;
-      let scrollRafId = 0;
-      let direction = 1; // +1 = scrolling toward the end, -1 = toward the start
-      let lastLeft = Number.NaN; // detects hitting a hard scroll bound
+    this.ref<HTMLButtonElement>("new-palette")?.addEventListener("click", () => {
+      if (this.canSaveToPalette()) {
+        this.promptCreatePalette();
+        return;
+      }
+      void this.openNewPalette();
+    });
 
-      const maxScroll = (): number =>
-        Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+    this.ref<HTMLButtonElement>("select-mode-toggle")?.addEventListener(
+      "click",
+      () => {
+        this.setSelectionMode(!this.selectionMode);
+      }
+    );
 
-      // Hand the resting position to native CSS scroll-snap so the edge inset
-      // lands on the device-pixel grid (clean at every zoom). Choose which edge
-      // to align based on the direction the user scrolled.
-      const settleSnap = (): void => {
-        scroller.classList.toggle("snap-end", direction >= 0);
-        scroller.classList.add("is-snapping");
-      };
+    this.ref<HTMLButtonElement>("export-palettes")?.addEventListener(
+      "click",
+      (event) => {
+        const button = event.currentTarget as HTMLButtonElement;
+        this.showExportMenu(button);
+      }
+    );
 
-      const animateScroll = (): void => {
-        const diff = targetScroll - scroller.scrollLeft;
-        const stuck = scroller.scrollLeft === lastLeft; // hit a hard bound
-        lastLeft = scroller.scrollLeft;
+    this.ref<HTMLButtonElement>("import-palettes")?.addEventListener(
+      "click",
+      () => {
+        this.showImportDialog();
+      }
+    );
 
-        if (Math.abs(diff) <= 0.5 || (stuck && Math.abs(diff) <= 4)) {
-          scrollRafId = 0;
-          settleSnap();
+    this.ref<HTMLButtonElement>("import-cancel")?.addEventListener(
+      "click",
+      () => {
+        this.hideImportDialog();
+      }
+    );
+
+    this.ref<HTMLButtonElement>("import-merge")?.addEventListener(
+      "click",
+      () => {
+        void this.runImport("merge");
+      }
+    );
+
+    this.ref<HTMLButtonElement>("import-replace")?.addEventListener(
+      "click",
+      () => {
+        void this.runImport("replace");
+      }
+    );
+
+    this.ref<HTMLInputElement>("import-file")?.addEventListener(
+      "change",
+      (event) => {
+        const input = event.target as HTMLInputElement;
+        const file = input.files?.[0];
+        if (!file) {
           return;
         }
+        void this.handleImportFile(file);
+        input.value = "";
+      }
+    );
 
-        scroller.scrollLeft += diff * 0.22;
-        scrollRafId = requestAnimationFrame(animateScroll);
-      };
+    this.bindScrollerWheel();
+    this.bindSettingsControls();
+  }
 
-      scroller.addEventListener(
-        "wheel",
-        (event) => {
-          const delta = event.deltaY !== 0 ? event.deltaY : event.deltaX;
-          if (delta === 0 || maxScroll() === 0) {
-            return;
-          }
-          event.preventDefault();
-          direction = delta > 0 ? 1 : -1;
-
-          // Disable mandatory snap during the gesture so it never fights the
-          // free-scroll momentum; it's re-enabled when the scroll settles.
-          scroller.classList.remove("is-snapping");
-
-          // Resync to the live position when starting a fresh gesture so the
-          // target never drifts, and keep a single animation loop running.
-          const running = scrollRafId !== 0;
-          if (!running) {
-            targetScroll = scroller.scrollLeft;
-            lastLeft = Number.NaN;
-          }
-          targetScroll = Math.min(
-            maxScroll(),
-            Math.max(0, targetScroll + delta)
-          );
-          if (!running) {
-            scrollRafId = requestAnimationFrame(animateScroll);
-          }
-        },
-        { passive: false }
-      );
+  private bindScrollerWheel(): void {
+    const scroller = this.ref<HTMLElement>("scroller");
+    if (!scroller) {
+      return;
     }
 
+    let targetScroll = 0;
+    let scrollRafId = 0;
+    let direction = 1;
+    let lastLeft = Number.NaN;
+
+    const maxScroll = (): number =>
+      Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+
+    const settleSnap = (): void => {
+      scroller.classList.toggle("snap-end", direction >= 0);
+      scroller.classList.add("is-snapping");
+    };
+
+    const animateScroll = (): void => {
+      const diff = targetScroll - scroller.scrollLeft;
+      const stuck = scroller.scrollLeft === lastLeft;
+      lastLeft = scroller.scrollLeft;
+
+      if (Math.abs(diff) <= 0.5 || (stuck && Math.abs(diff) <= 4)) {
+        scrollRafId = 0;
+        settleSnap();
+        return;
+      }
+
+      scroller.scrollLeft += diff * 0.22;
+      scrollRafId = requestAnimationFrame(animateScroll);
+    };
+
+    scroller.addEventListener(
+      "wheel",
+      (event) => {
+        const delta = event.deltaY !== 0 ? event.deltaY : event.deltaX;
+        if (delta === 0 || maxScroll() === 0) {
+          return;
+        }
+        event.preventDefault();
+        direction = delta > 0 ? 1 : -1;
+        scroller.classList.remove("is-snapping");
+
+        const running = scrollRafId !== 0;
+        if (!running) {
+          targetScroll = scroller.scrollLeft;
+          lastLeft = Number.NaN;
+        }
+        targetScroll = Math.min(
+          maxScroll(),
+          Math.max(0, targetScroll + delta)
+        );
+        if (!running) {
+          scrollRafId = requestAnimationFrame(animateScroll);
+        }
+      },
+      { passive: false }
+    );
+  }
+
+  private bindSettingsControls(): void {
     this.ref<HTMLElement>("theme-switcher")
       ?.querySelectorAll<HTMLButtonElement>("[data-theme-mode]")
       .forEach((button) => {
@@ -409,6 +805,264 @@ export class PanelController {
           void this.updateColorFormat(button.dataset.format as ColorFormat);
         });
       });
+  }
+
+  private showView(view: PanelView): void {
+    this.view = view;
+    const home = this.ref<HTMLElement>("home-view");
+    const editor = this.ref<HTMLElement>("editor-view");
+    home?.toggleAttribute("hidden", view !== "home");
+    editor?.toggleAttribute("hidden", view !== "editor");
+    this.updateHeaderChrome();
+    this.updateFooterCta();
+    this.scheduleHostSize();
+  }
+
+  private updateHeaderChrome(): void {
+    const close = this.ref<HTMLButtonElement>("close");
+    if (!close) {
+      return;
+    }
+    if (this.view === "editor") {
+      close.setAttribute("aria-label", "Back to palettes");
+      close.innerHTML = `
+        <svg class="icon icon--back" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+          <path d="M15 6l-6 6 6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        </svg>
+      `;
+      return;
+    }
+    close.setAttribute("aria-label", "Close PickHue");
+    close.innerHTML = `
+      <svg class="icon icon--close" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+        <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+    `;
+  }
+
+  private async openNewPalette(): Promise<void> {
+    try {
+      const palette = await createPalette();
+      this.palettes = await getPalettes();
+      await this.openEditor(palette);
+    } catch (error) {
+      this.handleStorageError(error);
+    }
+  }
+
+  private async openEditor(
+    palette: ColorPalette,
+    options?: { focusName?: boolean }
+  ): Promise<void> {
+    await this.editor?.open(
+      palette,
+      this.settings.recentColors,
+      this.settings.colorFormat,
+      options
+    );
+    this.showView("editor");
+  }
+
+  private canSaveToPalette(): boolean {
+    return this.selectionMode && this.selectedRecents.size > 0;
+  }
+
+  private setSelectionMode(enabled: boolean): void {
+    this.selectionMode = enabled;
+    if (!enabled) {
+      this.selectedRecents.clear();
+      this.selectedPaletteId = null;
+      this.dismissSavePaletteConfirm();
+    }
+    this.updateSelectionToggle();
+    this.renderRecentColors();
+    this.renderPalettes();
+    this.updateFooterCta();
+  }
+
+  private updateSelectionToggle(): void {
+    const toggle = this.ref<HTMLButtonElement>("select-mode-toggle");
+    if (!toggle) {
+      return;
+    }
+    const hasRecents = this.settings.recentColors.length > 0;
+    toggle.hidden = !hasRecents;
+    toggle.classList.toggle("is-active", this.selectionMode);
+    toggle.textContent = this.selectionMode ? "Cancel" : "Save to palette";
+  }
+
+  private updateFooterCta(): void {
+    const button = this.ref<HTMLButtonElement>("select-color");
+    if (!button) {
+      return;
+    }
+    button.hidden = false;
+    button.classList.remove("panel__cta--selection-mode", "panel__cta--save-ready");
+    if (this.view === "editor") {
+      button.textContent = "Select Color";
+      button.disabled = false;
+      return;
+    }
+    if (this.selectionMode) {
+      const count = this.selectedRecents.size;
+      button.textContent =
+        count > 0 ? "Cancel" : "Select colors";
+      button.disabled = count === 0;
+      button.classList.add("panel__cta--selection-mode");
+      return;
+    }
+    button.textContent = "Select Color";
+    button.disabled = false;
+  }
+
+  private highlightPaletteRow(paletteId: string): void {
+    this.selectedPaletteId = paletteId;
+    this.syncPalettePickState();
+  }
+
+  private clearPaletteRowSelection(): void {
+    this.selectedPaletteId = null;
+    this.syncPalettePickState();
+  }
+
+  private removeSavePaletteConfirmOverlay(): void {
+    this.getRoot()
+      .querySelector(".panel__save-palette-confirm-overlay")
+      ?.remove();
+  }
+
+  private dismissSavePaletteConfirm(): void {
+    this.removeSavePaletteConfirmOverlay();
+    this.clearPaletteRowSelection();
+  }
+
+  private promptSaveToPalette(palette: ColorPalette): void {
+    const colors = [...this.selectedRecents];
+    if (colors.length === 0 || !this.canSaveToPalette()) {
+      return;
+    }
+
+    this.removeSavePaletteConfirmOverlay();
+    this.highlightPaletteRow(palette.id);
+
+    const paletteName = palette.name.trim() || "this palette";
+    this.mountSavePaletteConfirm({
+      title: `Add to "${paletteName}"?`,
+      message: `Add ${colors.length} color${colors.length === 1 ? "" : "s"} to this palette.`,
+      confirmLabel: "Add colors",
+      onConfirm: () => this.saveSelectionToPalette(palette.id),
+    });
+  }
+
+  private promptCreatePalette(): void {
+    const colors = [...this.selectedRecents];
+    if (colors.length === 0 || !this.canSaveToPalette()) {
+      return;
+    }
+
+    this.removeSavePaletteConfirmOverlay();
+    this.clearPaletteRowSelection();
+
+    this.mountSavePaletteConfirm({
+      title: "Create new palette?",
+      message: `Create a palette with ${colors.length} color${colors.length === 1 ? "" : "s"}.`,
+      confirmLabel: "Create palette",
+      onConfirm: () => this.saveSelectionToNewPalette(),
+    });
+  }
+
+  private mountSavePaletteConfirm(options: {
+    title: string;
+    message: string;
+    confirmLabel: string;
+    onConfirm: () => void | Promise<void>;
+  }): void {
+    const host = this.panelEl;
+    if (!host) {
+      return;
+    }
+
+    const overlay = document.createElement("div");
+    overlay.className =
+      "panel__save-palette-confirm-overlay palette-editor__confirm-overlay";
+
+    const dialog = document.createElement("div");
+    dialog.className = "palette-editor__confirm-dialog";
+    dialog.setAttribute("role", "alertdialog");
+    dialog.setAttribute("aria-label", options.title);
+
+    const title = document.createElement("p");
+    title.className = "palette-editor__confirm-title";
+    title.textContent = options.title;
+
+    const message = document.createElement("p");
+    message.className = "palette-editor__confirm-message";
+    message.textContent = options.message;
+
+    const buttons = document.createElement("div");
+    buttons.className = "palette-editor__confirm-actions";
+
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.className = "palette-editor__action-btn";
+    cancel.textContent = "Cancel";
+    cancel.addEventListener("click", () => {
+      this.dismissSavePaletteConfirm();
+    });
+
+    const confirm = document.createElement("button");
+    confirm.type = "button";
+    confirm.className =
+      "palette-editor__action-btn panel__modal-btn--accent panel__save-palette-confirm-btn";
+    confirm.textContent = options.confirmLabel;
+    confirm.addEventListener("click", () => {
+      void options.onConfirm();
+    });
+
+    buttons.append(cancel, confirm);
+    dialog.append(title, message, buttons);
+    overlay.append(dialog);
+    host.append(overlay);
+    confirm.focus();
+  }
+
+  private finishSaveFlow(): void {
+    this.dismissSavePaletteConfirm();
+    this.setSelectionMode(false);
+  }
+
+  private async saveSelectionToPalette(paletteId: string): Promise<void> {
+    const colors = [...this.selectedRecents];
+    if (colors.length === 0) {
+      return;
+    }
+    try {
+      await addColorsToPalette(paletteId, colors);
+      this.palettes = await getPalettes();
+      this.renderPalettes();
+      this.finishSaveFlow();
+      this.showToast(`Saved ${colors.length} color${colors.length === 1 ? "" : "s"}`);
+    } catch (error) {
+      this.dismissSavePaletteConfirm();
+      this.handleStorageError(error);
+    }
+  }
+
+  private async saveSelectionToNewPalette(): Promise<void> {
+    const colors = [...this.selectedRecents];
+    if (colors.length === 0) {
+      return;
+    }
+    try {
+      await createPalette("Untitled palette", colors);
+      this.palettes = await getPalettes();
+      this.renderPalettes();
+      this.finishSaveFlow();
+      this.showToast(`Created palette with ${colors.length} color${colors.length === 1 ? "" : "s"}`);
+    } catch (error) {
+      this.dismissSavePaletteConfirm();
+      this.handleStorageError(error);
+    }
   }
 
   private renderSettings(): void {
@@ -445,14 +1099,36 @@ export class PanelController {
         const button = document.createElement("button");
         button.type = "button";
         button.className = "swatch";
+        if (this.selectionMode) {
+          button.classList.add("swatch--selectable");
+          if (this.selectedRecents.has(hex)) {
+            button.classList.add("is-selected");
+          }
+        }
         if (animateFirst && index === 0 && !this.hadRecentColors) {
           button.classList.add("swatch--enter");
         }
         button.style.backgroundColor = hex;
         button.title = formatColor(hex, this.settings.colorFormat);
         button.setAttribute("role", "listitem");
-        button.setAttribute("aria-label", `Copy ${button.title}`);
+        button.setAttribute(
+          "aria-label",
+          this.selectionMode
+            ? `Select ${button.title}`
+            : `Copy ${button.title}`
+        );
         button.addEventListener("click", () => {
+          if (this.selectionMode) {
+            if (this.selectedRecents.has(hex)) {
+              this.selectedRecents.delete(hex);
+            } else {
+              this.selectedRecents.add(hex);
+            }
+            this.renderRecentColors();
+            this.syncPalettePickState();
+            this.updateFooterCta();
+            return;
+          }
           void this.handleSwatchClick(hex);
         });
         return button;
@@ -460,6 +1136,362 @@ export class PanelController {
     );
 
     this.hadRecentColors = !isEmpty;
+    this.updateSelectionToggle();
+  }
+
+  private renderPalettes(): void {
+    const list = this.ref<HTMLElement>("palette-list");
+    if (!list) {
+      return;
+    }
+
+    if (this.palettes.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "panel__palettes-empty";
+      empty.textContent = this.canSaveToPalette()
+        ? "No palettes yet — use New palette above."
+        : "Group colors into named palettes.";
+      list.replaceChildren(empty);
+      return;
+    }
+
+    list.replaceChildren(
+      ...this.palettes.map((palette) => this.createPaletteRow(palette))
+    );
+    this.syncPalettePickState();
+    this.scheduleHostSize();
+  }
+
+  private syncPalettePickState(): void {
+    const list = this.ref<HTMLElement>("palette-list");
+    if (!list) {
+      return;
+    }
+
+    const pickActive = this.canSaveToPalette();
+    list.classList.toggle("panel__palettes--pick-mode", pickActive);
+    list.classList.toggle(
+      "panel__palettes--palette-chosen",
+      pickActive && this.selectedPaletteId !== null
+    );
+
+    list.querySelectorAll<HTMLElement>(".panel__palette-row").forEach((row) => {
+      const paletteId = row.dataset.paletteId ?? "";
+      row.classList.toggle("panel__palette-row--selectable", pickActive);
+      row.classList.toggle(
+        "is-selected",
+        pickActive && paletteId === this.selectedPaletteId
+      );
+      row
+        .querySelector<HTMLElement>(".panel__palette-menu-btn")
+        ?.classList.toggle("panel__palette-menu-btn--hidden", pickActive);
+    });
+  }
+
+  private createPaletteRow(palette: ColorPalette): HTMLElement {
+    const row = document.createElement("div");
+    row.className = "panel__palette-row";
+    row.dataset.paletteId = palette.id;
+
+    const main = document.createElement("button");
+    main.type = "button";
+    main.className = "panel__palette-main";
+    main.addEventListener("click", () => {
+      if (this.canSaveToPalette()) {
+        this.promptSaveToPalette(palette);
+        return;
+      }
+      void this.openEditor(palette);
+    });
+
+    const name = document.createElement("span");
+    name.className = "panel__palette-name";
+    name.textContent = palette.name;
+
+    const strip = document.createElement("span");
+    strip.className = "panel__palette-strip";
+    const preview = palette.colors.slice(0, PALETTE_PREVIEW_COUNT);
+    for (const hex of preview) {
+      const dot = document.createElement("span");
+      dot.className = "panel__palette-dot";
+      dot.style.backgroundColor = hex;
+      strip.append(dot);
+    }
+    if (palette.colors.length > PALETTE_PREVIEW_COUNT) {
+      const ellipsis = document.createElement("span");
+      ellipsis.className = "panel__palette-ellipsis";
+      ellipsis.setAttribute("aria-hidden", "true");
+      ellipsis.textContent = "…";
+      strip.append(ellipsis);
+    }
+
+    main.append(name, strip);
+
+    const menuBtn = document.createElement("button");
+    menuBtn.type = "button";
+    menuBtn.className = "panel__palette-btn panel__palette-menu-btn";
+    menuBtn.setAttribute("aria-label", `Actions for ${palette.name}`);
+    menuBtn.innerHTML = MORE_ICON_HTML;
+    menuBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      this.showPaletteRowMenu(menuBtn, palette);
+    });
+
+    row.append(main, menuBtn);
+    return row;
+  }
+
+  private showPaletteRowMenu(
+    anchor: HTMLElement,
+    palette: ColorPalette
+  ): void {
+    const root = this.getRoot();
+    const existing = root.querySelector(".palette-row-menu");
+    existing?.remove();
+
+    const row = anchor.closest(".panel__palette-row");
+    const panel = this.panelEl;
+    if (!row || !panel) {
+      return;
+    }
+
+    const menu = document.createElement("div");
+    menu.className = "palette-menu palette-row-menu";
+    menu.setAttribute("role", "menu");
+
+    const addItem = (
+      label: string,
+      action: () => void | Promise<void>,
+      options?: { danger?: boolean }
+    ): void => {
+      const item = document.createElement("button");
+      item.type = "button";
+      item.className = "palette-menu__item";
+      if (options?.danger) {
+        item.classList.add("palette-menu__item--danger");
+      }
+      item.textContent = label;
+      item.addEventListener("click", (event) => {
+        event.stopPropagation();
+        void action();
+        menu.remove();
+      });
+      menu.append(item);
+    };
+
+    addItem("Rename", () => {
+      void this.openEditor(palette, { focusName: true });
+    });
+    addItem("Export", () => {
+      exportPaletteAseFile(palette);
+      this.showToast("Downloaded .ase file");
+    });
+    addItem("Delete", () => {
+      this.showDeletePaletteConfirm(palette);
+    }, { danger: true });
+
+    panel.append(menu);
+
+    const rowRect = row.getBoundingClientRect();
+    const panelRect = panel.getBoundingClientRect();
+    menu.style.top = `${rowRect.bottom - panelRect.top + 4}px`;
+    requestAnimationFrame(() => {
+      const menuWidth = menu.offsetWidth;
+      menu.style.left = `${rowRect.right - panelRect.left - menuWidth}px`;
+    });
+
+    const dismiss = (): void => {
+      menu.remove();
+      document.removeEventListener("click", onOutside, true);
+    };
+    const onOutside = (event: MouseEvent): void => {
+      if (!menu.contains(event.target as Node)) {
+        dismiss();
+      }
+    };
+    requestAnimationFrame(() => {
+      document.addEventListener("click", onOutside, true);
+    });
+  }
+
+  private showDeletePaletteConfirm(palette: ColorPalette): void {
+    const panel = this.panelEl;
+    if (!panel) {
+      return;
+    }
+
+    panel.querySelector(".palette-editor__confirm-overlay")?.remove();
+
+    const paletteName = palette.name.trim() || "this palette";
+    const overlay = document.createElement("div");
+    overlay.className = "palette-editor__confirm-overlay";
+
+    const dialog = document.createElement("div");
+    dialog.className = "palette-editor__confirm-dialog";
+    dialog.setAttribute("role", "alertdialog");
+    dialog.setAttribute("aria-label", "Delete palette");
+
+    const title = document.createElement("p");
+    title.className = "palette-editor__confirm-title";
+    title.textContent = `Delete "${paletteName}"?`;
+
+    const message = document.createElement("p");
+    message.className = "palette-editor__confirm-message";
+    message.textContent = "This palette and its colors will be removed.";
+
+    const buttons = document.createElement("div");
+    buttons.className = "palette-editor__confirm-actions";
+
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.className = "palette-editor__action-btn";
+    cancel.textContent = "Cancel";
+    cancel.addEventListener("click", () => overlay.remove());
+
+    const confirm = document.createElement("button");
+    confirm.type = "button";
+    confirm.className =
+      "palette-editor__action-btn palette-editor__action-btn--danger";
+    confirm.textContent = "Delete";
+    confirm.addEventListener("click", () => {
+      overlay.remove();
+      void this.deletePaletteById(palette.id);
+    });
+
+    const onEscape = (event: KeyboardEvent): void => {
+      if (event.key !== "Escape") {
+        return;
+      }
+      event.stopPropagation();
+      overlay.remove();
+      document.removeEventListener("keydown", onEscape, true);
+    };
+    document.addEventListener("keydown", onEscape, true);
+    overlay.addEventListener("remove", () => {
+      document.removeEventListener("keydown", onEscape, true);
+    });
+
+    buttons.append(cancel, confirm);
+    dialog.append(title, message, buttons);
+    overlay.append(dialog);
+    panel.append(overlay);
+    cancel.focus();
+  }
+
+  private async deletePaletteById(id: string): Promise<void> {
+    try {
+      await deletePalette(id);
+      this.palettes = await getPalettes();
+      this.renderPalettes();
+      this.showToast("Palette deleted");
+    } catch (error) {
+      this.handleStorageError(error);
+    }
+  }
+
+  private showImportDialog(): void {
+    const dialog = this.ref<HTMLElement>("import-dialog");
+    const input = this.ref<HTMLTextAreaElement>("import-input");
+    if (!dialog || !input) {
+      return;
+    }
+    input.value = "";
+    dialog.hidden = false;
+  }
+
+  private hideImportDialog(): void {
+    this.ref<HTMLElement>("import-dialog")?.setAttribute("hidden", "");
+  }
+
+  private async handleImportFile(file: File): Promise<void> {
+    const name = file.name.toLowerCase();
+    try {
+      if (name.endsWith(".ase")) {
+        const buffer = await file.arrayBuffer();
+        const result = await importPalettesFromAse(buffer, "merge");
+        this.palettes = result.palettes;
+        this.renderPalettes();
+        this.hideImportDialog();
+        this.showToast(
+          `Imported ${result.added} new, updated ${result.updated}`
+        );
+        return;
+      }
+
+      const text = await file.text();
+      this.ref<HTMLTextAreaElement>("import-input")!.value = text;
+      this.showToast("File loaded — choose Merge or Replace");
+    } catch (error) {
+      this.showToast(
+        error instanceof Error ? error.message : "Could not read file"
+      );
+    }
+  }
+
+  private async runImport(mode: "merge" | "replace"): Promise<void> {
+    const input = this.ref<HTMLTextAreaElement>("import-input");
+    if (!input?.value.trim()) {
+      this.showToast("Paste palette data or choose a file");
+      return;
+    }
+
+    if (mode === "replace") {
+      const confirmed = window.confirm(
+        "Replace all saved palettes? This cannot be undone."
+      );
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    try {
+      const result = await importPalettes(input.value, mode);
+      this.palettes = result.palettes;
+      this.renderPalettes();
+      this.hideImportDialog();
+      if (mode === "merge") {
+        this.showToast(
+          `Imported ${result.added} new, updated ${result.updated}`
+        );
+      } else {
+        this.showToast(`Replaced with ${result.added} palettes`);
+      }
+    } catch (error) {
+      this.showToast(
+        error instanceof Error ? error.message : "Import failed"
+      );
+    }
+  }
+
+  private showExportMenu(anchor: HTMLButtonElement): void {
+    if (this.palettes.length === 0) {
+      this.showToast("No palettes to export");
+      return;
+    }
+
+    showActionMenu(this.getRoot(), anchor, [
+      {
+        label: "Adobe ASE (.ase)",
+        action: () => {
+          exportPalettesAseFile(this.palettes);
+          this.showToast("Downloaded pickhue-palettes.ase");
+        },
+      },
+      {
+        label: "Color list",
+        action: () => {
+          copyText(exportPalettesHexList(this.palettes));
+          this.showToast("Color list copied");
+        },
+      },
+      {
+        label: "PickHue JSON",
+        action: () => {
+          copyText(exportPalettes(this.palettes));
+          this.showToast("JSON copied to clipboard");
+        },
+      },
+    ]);
   }
 
   private applyResolvedTheme(): void {
@@ -486,6 +1518,16 @@ export class PanelController {
     this.settings = { ...this.settings, colorFormat: format };
     this.renderSettings();
     this.renderRecentColors();
+    if (this.view === "editor" && this.editor) {
+      const palette = this.editor.getPalette();
+      if (palette) {
+        await this.editor.open(
+          palette,
+          this.settings.recentColors,
+          format
+        );
+      }
+    }
     this.settings = await saveSettings({ colorFormat: format });
   }
 
@@ -497,10 +1539,10 @@ export class PanelController {
     this.renderRecentColors(
       previousLength === 0 && this.settings.recentColors.length > 0
     );
-    this.showToast(formatted, hex);
+    this.showToast(`Copied ${formatted}`, hex);
   }
 
-  private showToast(formatted: string, hex: string): void {
+  showToast(message: string, hex?: string): void {
     const toast = this.ref<HTMLElement>("toast");
     const swatch = this.ref<HTMLElement>("toast-swatch");
     const text = this.ref<HTMLElement>("toast-text");
@@ -508,8 +1550,13 @@ export class PanelController {
       return;
     }
 
-    swatch.style.backgroundColor = hex;
-    text.textContent = `Copied ${formatted}`;
+    if (hex) {
+      swatch.style.backgroundColor = hex;
+      swatch.hidden = false;
+    } else {
+      swatch.hidden = true;
+    }
+    text.textContent = message;
     toast.hidden = false;
     requestAnimationFrame(() => toast.classList.add("is-visible"));
 
@@ -522,5 +1569,17 @@ export class PanelController {
         toast.hidden = true;
       }, 220);
     }, 2200);
+  }
+
+  private handleStorageError(error: unknown): void {
+    if (error instanceof StorageQuotaError) {
+      this.showToast(
+        "Storage full — delete a palette or export and remove old ones"
+      );
+      return;
+    }
+    if (error instanceof Error) {
+      this.showToast(error.message);
+    }
   }
 }

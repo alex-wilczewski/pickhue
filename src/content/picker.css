@@ -117,7 +117,7 @@
 
 .pickhue-picker__hint b {
   font-weight: 600;
-  color: #e7fe96;
+  color: #b8f06a;
 }
 
 .pickhue-copy-toast {
@@ -149,6 +149,79 @@
 .pickhue-copy-toast.is-visible {
   transform: translate(-50%, 0);
   opacity: 1;
+  pointer-events: auto;
+}
+
+.pickhue-copy-toast__save {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  color: #b8f06a;
+  background: none;
+  border: none;
+  padding: 4px 0;
+  margin-left: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.pickhue-copy-toast__save:hover {
+  text-decoration: underline;
+}
+
+.palette-menu {
+  position: fixed;
+  z-index: 2147483647;
+  min-width: 160px;
+  max-width: 240px;
+  max-height: 200px;
+  overflow-y: auto;
+  background: #242424;
+  border: 1px solid rgba(246, 246, 246, 0.12);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
+  padding: 4px;
+  font-family: "Geist", "Segoe UI", system-ui, sans-serif;
+}
+
+.palette-menu__item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  text-align: left;
+  color: #f6f6f6;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.palette-menu__item:hover {
+  background: rgba(246, 246, 246, 0.1);
+}
+
+.palette-menu__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.palette-menu__swatches {
+  display: inline-flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.palette-menu__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  border: 1px solid rgba(246, 246, 246, 0.2);
 }
 
 .pickhue-copy-toast__swatch {

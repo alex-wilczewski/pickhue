@@ -29,8 +29,11 @@ if (!(globalThis as Record<string, unknown>)[LOADED_FLAG]) {
     });
 
   const picker = new EyedropperOverlay();
+  let pendingPaletteId: string | null = null;
+
   const panel = new PanelController({
-    onStartPicker: () => {
+    onStartPicker: (options) => {
+      pendingPaletteId = options?.paletteId ?? null;
       void launchPicker();
     },
   });
@@ -41,12 +44,21 @@ if (!(globalThis as Record<string, unknown>)[LOADED_FLAG]) {
     await picker.start();
   }
 
-  picker.onClose = (reason) => {
-    if (reason === "pick") {
+  picker.onClose = (result) => {
+    if (result.reason === "pick" && result.hex) {
+      if (pendingPaletteId) {
+        const paletteId = pendingPaletteId;
+        pendingPaletteId = null;
+        void panel.handlePickedColorForPalette(result.hex, paletteId).then(() => {
+          void panel.show();
+        });
+        return;
+      }
       // Reopen so the freshly picked color is visible at the front of recents.
       void panel.show();
       return;
     }
+    pendingPaletteId = null;
     // Esc dismisses the whole extension, not back to the panel.
   };
 

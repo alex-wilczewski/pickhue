@@ -1,7 +1,13 @@
 import { copyText } from "../shared/clipboard";
 import { formatColor } from "../shared/colors";
 import { colorDistanceSq, probeDomColor } from "../shared/dom-color";
-import { getSettings } from "../shared/storage";
+import { showPaletteMenu } from "./palette-menu";
+import {
+  addColorToPalette,
+  createPalette,
+  getPalettes,
+  getSettings,
+} from "../shared/storage";
 import type { ColorFormat } from "../shared/types";
 
 const PICKER_ID = "pickhue-picker-root";
@@ -30,9 +36,14 @@ interface CaptureResponse {
 
 export type PickerCloseReason = "pick" | "cancel";
 
+export interface PickerCloseResult {
+  reason: PickerCloseReason;
+  hex?: string;
+}
+
 export class EyedropperOverlay {
-  /** Invoked whenever the picker stops. `pick` = color chosen; `cancel` = Esc. */
-  onClose?: (reason: PickerCloseReason) => void;
+  /** Invoked whenever the picker stops. */
+  onClose?: (result: PickerCloseResult) => void;
 
   private root: HTMLDivElement | null = null;
   private canvas: HTMLCanvasElement | null = null;
@@ -56,6 +67,7 @@ export class EyedropperOverlay {
   private hasPointer = false;
   private colorFormat: ColorFormat = "hex";
   private zoom = ZOOM_DEFAULT;
+  private lastPickedHex: string | null = null;
   private hint: HTMLParagraphElement | null = null;
   private capturePending = false;
   private scrollCapturePending = false;
@@ -313,7 +325,11 @@ export class EyedropperOverlay {
     this.hint = null;
     this.hasPointer = false;
     this.zoom = ZOOM_DEFAULT;
-    this.onClose?.(reason);
+    this.onClose?.({
+      reason,
+      hex: reason === "pick" ? (this.lastPickedHex ?? undefined) : undefined,
+    });
+    this.lastPickedHex = null;
   }
 
   private mount(): void {
@@ -436,6 +452,7 @@ export class EyedropperOverlay {
     const formatted = formatColor(hex, this.colorFormat);
     copyText(formatted);
     chrome.runtime.sendMessage({ type: "COLOR_PICKED", hex });
+    this.lastPickedHex = hex;
     this.stop("pick");
     showCopyToast(formatted, hex);
   };
@@ -549,11 +566,70 @@ export function showCopyToast(formatted: string, hex: string): void {
   toast.innerHTML = `
     <span class="pickhue-copy-toast__swatch" style="background-color:${hex}"></span>
     <span class="pickhue-copy-toast__text">Copied ${formatted}</span>
+    <button type="button" class="pickhue-copy-toast__save">Save to palette</button>
   `;
+  toast.style.pointerEvents = "auto";
+
+  const saveBtn = toast.querySelector<HTMLButtonElement>(
+    ".pickhue-copy-toast__save"
+  );
+  saveBtn?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    void openPickToastPaletteMenu(saveBtn, hex);
+  });
 
   requestAnimationFrame(() => toast?.classList.add("is-visible"));
 
   window.setTimeout(() => {
     toast?.classList.remove("is-visible");
-  }, 2200);
+    window.setTimeout(() => {
+      if (toast) {
+        toast.style.pointerEvents = "none";
+      }
+    }, 220);
+  }, 4000);
+}
+
+async function openPickToastPaletteMenu(
+  anchor: HTMLButtonElement,
+  hex: string
+): Promise<void> {
+  const palettes = await getPalettes();
+  showPaletteMenu(document, anchor, palettes, {
+    onSelect: async (paletteId) => {
+      try {
+        await addColorToPalette(paletteId, hex);
+        showPaletteSavedToast(hex, "Saved to palette");
+      } catch {
+        showPaletteSavedToast(hex, "Could not save");
+      }
+    },
+    onNewPalette: async () => {
+      try {
+        await createPalette("Untitled palette", [hex]);
+        showPaletteSavedToast(hex, "Created new palette");
+      } catch {
+        showPaletteSavedToast(hex, "Could not create palette");
+      }
+    },
+  });
+}
+
+function showPaletteSavedToast(hex: string, message: string): void {
+  const toast = document.getElementById(TOAST_ID);
+  if (!toast) {
+    return;
+  }
+  const text = toast.querySelector(".pickhue-copy-toast__text");
+  const saveBtn = toast.querySelector(".pickhue-copy-toast__save");
+  if (text) {
+    text.textContent = message;
+  }
+  saveBtn?.remove();
+  const swatch = toast.querySelector<HTMLElement>(
+    ".pickhue-copy-toast__swatch"
+  );
+  if (swatch) {
+    swatch.style.backgroundColor = hex;
+  }
 }

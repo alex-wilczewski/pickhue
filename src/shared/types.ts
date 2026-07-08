@@ -7,6 +7,27 @@ export interface Settings {
   recentColors: string[];
 }
 
+export interface ColorPalette {
+  id: string;
+  name: string;
+  colors: string[];
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface PalettesStore {
+  version: 1;
+  palettes: ColorPalette[];
+}
+
+export interface PaletteExportEnvelope {
+  pickhue: 1;
+  exportedAt: number;
+  palettes: Array<{ name: string; colors: string[] }>;
+}
+
+export type PaletteImportMode = "merge" | "replace";
+
 /** @deprecated Migrated to `themeMode` on read. */
 export interface LegacySettings extends Partial<Settings> {
   lightMode?: boolean;
