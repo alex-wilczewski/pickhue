@@ -305,6 +305,27 @@ export async function reorderPaletteColor(
   return updatePalette(paletteId, { colors });
 }
 
+export async function reorderPalettes(
+  fromIndex: number,
+  toIndex: number
+): Promise<ColorPalette[]> {
+  const store = await getPalettesStore();
+  const palettes = [...store.palettes];
+  if (
+    fromIndex < 0 ||
+    fromIndex >= palettes.length ||
+    toIndex < 0 ||
+    toIndex >= palettes.length ||
+    fromIndex === toIndex
+  ) {
+    return palettes;
+  }
+  const [item] = palettes.splice(fromIndex, 1);
+  palettes.splice(toIndex, 0, item);
+  const saved = await savePalettesStore({ version: 1, palettes });
+  return saved.palettes;
+}
+
 export async function replaceAllPalettes(
   palettes: ColorPalette[]
 ): Promise<PalettesStore> {

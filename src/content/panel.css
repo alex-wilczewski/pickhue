@@ -400,10 +400,70 @@ button {
   outline-offset: -1px;
 }
 
+.panel__palettes-wrap {
+  --palette-row-h: 37px;
+  --palette-row-gap: 6px;
+  --palette-peek: 16px;
+  --palette-fade-h: 40px;
+  --palette-viewport-h: calc(
+    5 * var(--palette-row-h) + 4 * var(--palette-row-gap) + var(--palette-peek)
+  );
+  position: relative;
+  flex-shrink: 0;
+  outline: none;
+}
+
+.panel__palettes-wrap.is-scrollable {
+  cursor: default;
+}
+
 .panel__palettes {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--palette-row-gap);
+  overflow-x: hidden;
+  overflow-y: visible;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.panel__palettes-wrap.is-scrollable .panel__palettes {
+  height: var(--palette-viewport-h);
+  max-height: var(--palette-viewport-h);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.panel__palettes::-webkit-scrollbar {
+  display: none;
+}
+
+.panel__palettes-wrap::before,
+.panel__palettes-wrap::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: var(--palette-fade-h);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  z-index: 2;
+}
+
+.panel__palettes-wrap::before {
+  top: 0;
+  background: linear-gradient(to bottom, var(--bg) 15%, transparent);
+}
+
+.panel__palettes-wrap::after {
+  bottom: 0;
+  background: linear-gradient(to top, var(--bg) 15%, transparent);
+}
+
+.panel__palettes-wrap.has-more-above::before,
+.panel__palettes-wrap.has-more-below::after {
+  opacity: 1;
 }
 
 .panel__palettes-empty {
@@ -418,7 +478,9 @@ button {
   align-items: center;
   gap: 8px;
   padding: 4px;
-  min-height: 0;
+  height: var(--palette-row-h, 37px);
+  min-height: var(--palette-row-h, 37px);
+  flex-shrink: 0;
   border-radius: 10px;
   background-color: var(--swatch-track);
   box-sizing: border-box;
@@ -455,6 +517,25 @@ button {
   }
 }
 
+.panel__palettes--move-mode .panel__palette-row.is-moving {
+  position: relative;
+  z-index: 1;
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+  animation: palette-row-pick-pulse 1.5s ease-in-out infinite;
+  cursor: grab;
+}
+
+.panel__palettes--move-mode .panel__palette-row.is-moving.is-dragging {
+  opacity: 0.45;
+  cursor: grabbing;
+}
+
+.panel__palettes--move-mode .panel__palette-row.is-drop-target {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
 .panel__palette-main {
   flex: 1;
   min-width: 0;
@@ -475,7 +556,7 @@ button {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  transform: translateY(2px);
+  transform: translateY(1px);
 }
 
 .panel__palette-strip {
@@ -530,8 +611,8 @@ button {
 
 .panel__palette-menu-btn .icon--settings {
   display: block;
-  width: 13px;
-  height: 13px;
+  width: 14px;
+  height: 14px;
   flex-shrink: 0;
 }
 
@@ -741,6 +822,16 @@ button {
   color: var(--danger-text);
 }
 
+.palette-menu__item--with-icon {
+  justify-content: flex-start;
+  gap: 5px;
+}
+
+.palette-menu__item--with-icon .icon--delete {
+  flex-shrink: 0;
+  margin-top: -1px;
+}
+
 .palette-row-menu {
   min-width: 140px;
   max-height: none;
@@ -773,7 +864,7 @@ button {
 }
 
 .palette-editor__header {
-  padding: 8px var(--editor-inset) 4px;
+  padding: 16px var(--editor-inset) 0;
 }
 
 .palette-editor__name {
@@ -785,8 +876,8 @@ button {
   font-weight: 600;
   line-height: 1.3;
   text-align: left;
-  background: transparent;
-  border: 1px solid transparent;
+  background: var(--swatch-track);
+  border: 1px solid var(--control-border);
   border-radius: 8px;
   color: var(--text);
   padding: 6px 8px;
@@ -813,7 +904,7 @@ button {
 }
 
 .palette-editor__swatches-wrap {
-  padding: 8px var(--editor-inset) 12px;
+  padding: 6px var(--editor-inset) 12px;
 }
 
 .palette-editor__swatches {
@@ -865,21 +956,35 @@ button {
   position: absolute;
   top: -4px;
   right: -4px;
+  z-index: 1;
   width: 16px;
   height: 16px;
+  padding: 0;
+  border: 1px solid var(--swatch-border);
   border-radius: 50%;
   background: var(--close-bg);
   color: var(--text);
-  font-size: 12px;
-  line-height: 1;
-  display: grid;
-  place-items: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   opacity: 0;
+  pointer-events: none;
+}
+
+.palette-editor__remove:hover {
+  background: var(--close-bg-hover);
+  border-color: var(--swatch-border-hover);
+}
+
+.palette-editor__remove .icon {
+  display: block;
+  flex-shrink: 0;
 }
 
 .palette-editor__swatch-item:hover .palette-editor__remove,
 .palette-editor__swatch-item:focus-within .palette-editor__remove {
   opacity: 1;
+  pointer-events: auto;
 }
 
 .palette-editor__add {
@@ -954,6 +1059,18 @@ button {
   background: var(--danger-hover);
 }
 
+.palette-editor__action-btn--with-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.palette-editor__action-btn--with-icon .icon--delete {
+  flex-shrink: 0;
+  margin-top: -1px;
+}
+
 .palette-editor__recents-overlay {
   position: absolute;
   inset: 0;
@@ -968,19 +1085,40 @@ button {
   --recents-swatch: 32px;
   --recents-gap: 4px;
   --recents-inset: 4px;
+  --recents-shell-bleed-x: 4px;
   position: relative;
+  isolation: isolate;
   display: flex;
   flex-direction: column;
   align-items: stretch;
   width: fit-content;
   max-width: 100%;
   max-height: 100%;
-  overflow: hidden;
-  background: var(--menu-bg);
+  overflow: visible;
+  background: transparent;
+  border: none;
   border-radius: 12px;
-  padding: 14px 12px;
-  border: 1px solid var(--divider);
+  padding: 14px 13px;
   box-sizing: border-box;
+}
+
+.palette-editor__recents-dialog::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(-1 * var(--recents-shell-bleed-x));
+  right: calc(-1 * var(--recents-shell-bleed-x));
+  background: var(--menu-bg);
+  border: 1px solid var(--divider);
+  border-radius: inherit;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.palette-editor__recents-dialog > * {
+  position: relative;
+  z-index: 1;
 }
 
 .palette-editor__recents-title {
@@ -1002,7 +1140,7 @@ button {
   max-height: calc(
     4 * var(--recents-swatch) + 3 * var(--recents-gap) + 2 * var(--recents-inset) + 4px
   );
-  overflow-x: visible;
+  overflow-x: hidden;
   overflow-y: auto;
   scrollbar-width: none;
   -ms-overflow-style: none;

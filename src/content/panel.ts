@@ -1,5 +1,5 @@
 import panelCss from "./panel.css?inline";
-import { SETTINGS_ICON_HTML } from "./icons";
+import { DELETE_BUTTON_HTML, DELETE_ICON_HTML, SETTINGS_ICON_HTML } from "./icons";
 import { PaletteEditorView } from "./palette-editor";
 import { showActionMenu } from "./palette-menu";
 import { copyText } from "../shared/clipboard";
@@ -17,6 +17,7 @@ import {
   deletePalette,
   getPalettes,
   getSettings,
+  reorderPalettes,
   saveSettings,
   StorageQuotaError,
 } from "../shared/storage";
@@ -26,7 +27,7 @@ import type { ColorFormat, ColorPalette, Settings, ThemeMode } from "../shared/t
 const HOST_ID = "pickhue-panel-host";
 const PANEL_STYLES_ID = "pickhue-panel-styles";
 const CLOSE_ANIM_MS = 180;
-const PALETTE_PREVIEW_COUNT = 5;
+const PALETTE_PREVIEW_COUNT = 4;
 
 /** Strip :host reset — it must not run against popup page roots. */
 function panelCssForPage(css: string): string {
@@ -74,7 +75,9 @@ const TEMPLATE = `
               New palette
             </button>
           </div>
-          <div class="panel__palettes" data-ref="palette-list"></div>
+          <div class="panel__palettes-wrap" data-ref="palette-list-wrap">
+            <div class="panel__palettes" data-ref="palette-list"></div>
+          </div>
         </section>
 
         <section class="panel__section panel__section--settings">
@@ -192,6 +195,9 @@ export class PanelController {
   private view: PanelView = "home";
   private selectionMode = false;
   private selectedPaletteId: string | null = null;
+  private moveModePaletteId: string | null = null;
+  private paletteDragIndex = -1;
+  private paletteDropHandled = false;
   private readonly selectedRecents = new Set<string>();
   private editor: PaletteEditorView | null = null;
   private reopenEditorAfterPick = false;
@@ -287,6 +293,12 @@ export class PanelController {
       event.preventDefault();
       event.stopPropagation();
       this.setSelectionMode(false);
+      return;
+    }
+    if (this.moveModePaletteId) {
+      event.preventDefault();
+      event.stopPropagation();
+      this.setMoveMode(null);
       return;
     }
     event.preventDefault();
@@ -634,6 +646,14 @@ export class PanelController {
       this.panelEl;
     mount?.addEventListener("keydown", stopKeys);
     mount?.addEventListener("keyup", stopKeys);
+    // Keep host-page scroll from moving while the cursor is over the panel.
+    mount?.addEventListener(
+      "wheel",
+      (event) => {
+        event.stopPropagation();
+      },
+      { passive: true, capture: true }
+    );
 
     this.ref<HTMLButtonElement>("select-color")?.addEventListener("click", () => {
       if (this.selectionMode) {
@@ -725,6 +745,228 @@ export class PanelController {
 
     this.bindScrollerWheel();
     this.bindSettingsControls();
+    this.bindPaletteListDrag();
+    this.bindPaletteListScroll();
+  }
+
+  private bindPaletteListScroll(): void {
+    const list = this.ref<HTMLElement>("palette-list");
+    const wrap = this.ref<HTMLElement>("palette-list-wrap");
+    if (!list || !wrap || wrap.dataset.scrollBound === "true") {
+      return;
+    }
+    wrap.dataset.scrollBound = "true";
+
+    let hovering = false;
+    wrap.addEventListener("pointerenter", () => {
+      hovering = true;
+    });
+    wrap.addEventListener("pointerleave", () => {
+      hovering = false;
+    });
+    wrap.addEventListener("pointerdown", () => {
+      if (wrap.classList.contains("is-scrollable")) {
+        wrap.focus({ preventScroll: true });
+      }
+    });
+
+    list.addEventListener("scroll", () => this.syncPaletteListOverflow(), {
+      passive: true,
+    });
+
+    // Capture wheel here so the host page never scrolls when the cursor is over
+    // this section. Only move the palette list when hovered or focused.
+    wrap.addEventListener(
+      "wheel",
+      (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        if (!wrap.classList.contains("is-scrollable")) {
+          return;
+        }
+
+        const focused = this.getFocusedElement();
+        const sectionActive =
+          hovering || (focused instanceof Node && wrap.contains(focused));
+        if (!sectionActive) {
+          return;
+        }
+
+        const maxScroll = Math.max(0, list.scrollHeight - list.clientHeight);
+        if (maxScroll <= 0) {
+          return;
+        }
+
+        const delta = event.deltaY !== 0 ? event.deltaY : event.deltaX;
+        list.scrollTop = Math.min(
+          maxScroll,
+          Math.max(0, list.scrollTop + delta)
+        );
+        this.syncPaletteListOverflow();
+      },
+      { passive: false, capture: true }
+    );
+  }
+
+  private syncPaletteListOverflow(): void {
+    const list = this.ref<HTMLElement>("palette-list");
+    const wrap = this.ref<HTMLElement>("palette-list-wrap");
+    if (!list || !wrap) {
+      return;
+    }
+
+    const shouldScroll = this.palettes.length > 5;
+    wrap.classList.toggle("is-scrollable", shouldScroll);
+    if (shouldScroll) {
+      wrap.tabIndex = 0;
+      wrap.setAttribute("aria-label", "Saved palettes");
+    } else {
+      wrap.removeAttribute("tabindex");
+      wrap.removeAttribute("aria-label");
+      wrap.classList.remove("has-more-above", "has-more-below");
+      return;
+    }
+
+    const maxScroll = Math.max(0, list.scrollHeight - list.clientHeight);
+    const hasOverflow = maxScroll > 1;
+    const atTop = list.scrollTop <= 1;
+    const atBottom = list.scrollTop >= maxScroll - 1;
+
+    wrap.classList.toggle("has-more-above", hasOverflow && !atTop);
+    wrap.classList.toggle("has-more-below", hasOverflow && !atBottom);
+  }
+
+  private bindPaletteListDrag(): void {
+    const list = this.ref<HTMLElement>("palette-list");
+    if (!list || list.dataset.dragBound === "true") {
+      return;
+    }
+    list.dataset.dragBound = "true";
+
+    list.addEventListener("dragstart", (event) => {
+      if (!this.moveModePaletteId) {
+        return;
+      }
+      const row = (event.target as HTMLElement).closest<HTMLElement>(
+        ".panel__palette-row"
+      );
+      if (!row || row.dataset.paletteId !== this.moveModePaletteId) {
+        event.preventDefault();
+        return;
+      }
+      this.paletteDragIndex = this.palettes.findIndex(
+        (palette) => palette.id === this.moveModePaletteId
+      );
+      event.dataTransfer?.setData("text/plain", String(this.paletteDragIndex));
+      if (event.dataTransfer) {
+        event.dataTransfer.effectAllowed = "move";
+      }
+      row.classList.add("is-dragging");
+    });
+
+    list.addEventListener("dragend", (event) => {
+      const row = (event.target as HTMLElement).closest<HTMLElement>(
+        ".panel__palette-row"
+      );
+      row?.classList.remove("is-dragging");
+      for (const item of list.querySelectorAll<HTMLElement>(
+        ".panel__palette-row"
+      )) {
+        item.classList.remove("is-drop-target");
+      }
+      this.paletteDragIndex = -1;
+      if (!this.paletteDropHandled) {
+        this.setMoveMode(null);
+      }
+      this.paletteDropHandled = false;
+    });
+
+    list.addEventListener("dragover", (event) => {
+      if (!this.moveModePaletteId || this.paletteDragIndex < 0) {
+        return;
+      }
+      const row = (event.target as HTMLElement).closest<HTMLElement>(
+        ".panel__palette-row"
+      );
+      if (!row || row.dataset.paletteId === this.moveModePaletteId) {
+        return;
+      }
+      event.preventDefault();
+      if (event.dataTransfer) {
+        event.dataTransfer.dropEffect = "move";
+      }
+      for (const item of list.querySelectorAll<HTMLElement>(
+        ".panel__palette-row"
+      )) {
+        item.classList.remove("is-drop-target");
+      }
+      row.classList.add("is-drop-target");
+    });
+
+    list.addEventListener("dragleave", (event) => {
+      const row = (event.target as HTMLElement).closest<HTMLElement>(
+        ".panel__palette-row"
+      );
+      if (!row) {
+        return;
+      }
+      const related = event.relatedTarget as Node | null;
+      if (related && row.contains(related)) {
+        return;
+      }
+      row.classList.remove("is-drop-target");
+    });
+
+    list.addEventListener("drop", (event) => {
+      if (!this.moveModePaletteId || this.paletteDragIndex < 0) {
+        return;
+      }
+      const row = (event.target as HTMLElement).closest<HTMLElement>(
+        ".panel__palette-row"
+      );
+      if (!row || row.dataset.paletteId === this.moveModePaletteId) {
+        return;
+      }
+      event.preventDefault();
+      row.classList.remove("is-drop-target");
+      const dropIndex = this.palettes.findIndex(
+        (palette) => palette.id === row.dataset.paletteId
+      );
+      if (dropIndex >= 0 && dropIndex !== this.paletteDragIndex) {
+        this.paletteDropHandled = true;
+        void this.reorderPalettesInList(this.paletteDragIndex, dropIndex);
+      }
+    });
+  }
+
+  private async reorderPalettesInList(
+    fromIndex: number,
+    toIndex: number
+  ): Promise<void> {
+    try {
+      this.palettes = await reorderPalettes(fromIndex, toIndex);
+      this.moveModePaletteId = null;
+      this.paletteDragIndex = -1;
+      this.renderPalettes();
+    } catch (error) {
+      this.handleStorageError(error);
+    }
+  }
+
+  private setMoveMode(paletteId: string | null): void {
+    if (paletteId && this.selectionMode) {
+      this.selectionMode = false;
+      this.selectedRecents.clear();
+      this.selectedPaletteId = null;
+      this.dismissSavePaletteConfirm();
+      this.updateSelectionToggle();
+      this.renderRecentColors();
+      this.updateFooterCta();
+    }
+    this.moveModePaletteId = paletteId;
+    this.paletteDragIndex = -1;
+    this.renderPalettes();
   }
 
   private bindScrollerWheel(): void {
@@ -868,6 +1110,10 @@ export class PanelController {
   }
 
   private setSelectionMode(enabled: boolean): void {
+    if (enabled) {
+      this.moveModePaletteId = null;
+      this.paletteDragIndex = -1;
+    }
     this.selectionMode = enabled;
     if (!enabled) {
       this.selectedRecents.clear();
@@ -917,12 +1163,12 @@ export class PanelController {
 
   private highlightPaletteRow(paletteId: string): void {
     this.selectedPaletteId = paletteId;
-    this.syncPalettePickState();
+    this.syncPaletteListState();
   }
 
   private clearPaletteRowSelection(): void {
     this.selectedPaletteId = null;
-    this.syncPalettePickState();
+    this.syncPaletteListState();
   }
 
   private removeSavePaletteConfirmOverlay(): void {
@@ -1125,7 +1371,7 @@ export class PanelController {
               this.selectedRecents.add(hex);
             }
             this.renderRecentColors();
-            this.syncPalettePickState();
+            this.syncPaletteListState();
             this.updateFooterCta();
             return;
           }
@@ -1152,28 +1398,36 @@ export class PanelController {
         ? "No palettes yet — use New palette above."
         : "Group colors into named palettes.";
       list.replaceChildren(empty);
+      this.syncPaletteListOverflow();
+      this.scheduleHostSize();
       return;
     }
 
     list.replaceChildren(
       ...this.palettes.map((palette) => this.createPaletteRow(palette))
     );
-    this.syncPalettePickState();
-    this.scheduleHostSize();
+    this.syncPaletteListState();
+    this.syncPaletteListOverflow();
+    requestAnimationFrame(() => {
+      this.syncPaletteListOverflow();
+      this.scheduleHostSize();
+    });
   }
 
-  private syncPalettePickState(): void {
+  private syncPaletteListState(): void {
     const list = this.ref<HTMLElement>("palette-list");
     if (!list) {
       return;
     }
 
     const pickActive = this.canSaveToPalette();
+    const moveActive = this.moveModePaletteId !== null;
     list.classList.toggle("panel__palettes--pick-mode", pickActive);
     list.classList.toggle(
       "panel__palettes--palette-chosen",
       pickActive && this.selectedPaletteId !== null
     );
+    list.classList.toggle("panel__palettes--move-mode", moveActive);
 
     list.querySelectorAll<HTMLElement>(".panel__palette-row").forEach((row) => {
       const paletteId = row.dataset.paletteId ?? "";
@@ -1182,9 +1436,18 @@ export class PanelController {
         "is-selected",
         pickActive && paletteId === this.selectedPaletteId
       );
+      row.classList.toggle(
+        "is-moving",
+        moveActive && paletteId === this.moveModePaletteId
+      );
+      row.draggable =
+        moveActive && paletteId === this.moveModePaletteId;
       row
         .querySelector<HTMLElement>(".panel__palette-menu-btn")
-        ?.classList.toggle("panel__palette-menu-btn--hidden", pickActive);
+        ?.classList.toggle(
+          "panel__palette-menu-btn--hidden",
+          pickActive || moveActive
+        );
     });
   }
 
@@ -1197,6 +1460,9 @@ export class PanelController {
     main.type = "button";
     main.className = "panel__palette-main";
     main.addEventListener("click", () => {
+      if (this.moveModePaletteId) {
+        return;
+      }
       if (this.canSaveToPalette()) {
         this.promptSaveToPalette(palette);
         return;
@@ -1262,7 +1528,7 @@ export class PanelController {
     const addItem = (
       label: string,
       action: () => void | Promise<void>,
-      options?: { danger?: boolean }
+      options?: { danger?: boolean; iconHtml?: string }
     ): void => {
       const item = document.createElement("button");
       item.type = "button";
@@ -1270,7 +1536,12 @@ export class PanelController {
       if (options?.danger) {
         item.classList.add("palette-menu__item--danger");
       }
-      item.textContent = label;
+      if (options?.iconHtml) {
+        item.classList.add("palette-menu__item--with-icon");
+        item.innerHTML = `${options.iconHtml}<span>${label}</span>`;
+      } else {
+        item.textContent = label;
+      }
       item.addEventListener("click", (event) => {
         event.stopPropagation();
         void action();
@@ -1286,9 +1557,12 @@ export class PanelController {
       exportPaletteAseFile(palette);
       this.showToast("Downloaded .ase file");
     });
+    addItem("Move", () => {
+      this.setMoveMode(palette.id);
+    });
     addItem("Delete", () => {
       this.showDeletePaletteConfirm(palette);
-    }, { danger: true });
+    }, { danger: true, iconHtml: DELETE_ICON_HTML });
 
     panel.append(menu);
 
@@ -1351,8 +1625,8 @@ export class PanelController {
     const confirm = document.createElement("button");
     confirm.type = "button";
     confirm.className =
-      "palette-editor__action-btn palette-editor__action-btn--danger";
-    confirm.textContent = "Delete";
+      "palette-editor__action-btn palette-editor__action-btn--danger palette-editor__action-btn--with-icon";
+    confirm.innerHTML = DELETE_BUTTON_HTML;
     confirm.addEventListener("click", () => {
       overlay.remove();
       void this.deletePaletteById(palette.id);

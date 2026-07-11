@@ -16,7 +16,11 @@ import {
   updatePalette,
 } from "../shared/storage";
 import type { ColorFormat, ColorPalette } from "../shared/types";
-import { PLUS_ICON_HTML } from "./icons";
+import {
+  DELETE_BUTTON_HTML,
+  PLUS_ICON_HTML,
+  REMOVE_SWATCH_ICON_HTML,
+} from "./icons";
 
 export interface PaletteEditorCallbacks {
   onBack: () => void;
@@ -316,8 +320,8 @@ export class PaletteEditorView {
     const deleteBtn = document.createElement("button");
     deleteBtn.type = "button";
     deleteBtn.className =
-      "palette-editor__action-btn palette-editor__action-btn--danger";
-    deleteBtn.textContent = "Delete";
+      "palette-editor__action-btn palette-editor__action-btn--danger palette-editor__action-btn--with-icon";
+    deleteBtn.innerHTML = DELETE_BUTTON_HTML;
     deleteBtn.addEventListener("click", () => {
       this.showDeleteConfirm();
     });
@@ -349,7 +353,7 @@ export class PaletteEditorView {
     remove.type = "button";
     remove.className = "palette-editor__remove";
     remove.setAttribute("aria-label", "Remove color");
-    remove.textContent = "×";
+    remove.innerHTML = REMOVE_SWATCH_ICON_HTML;
     remove.addEventListener("click", (event) => {
       event.stopPropagation();
       void this.removeColor(hex);
@@ -507,8 +511,8 @@ export class PaletteEditorView {
     const confirm = document.createElement("button");
     confirm.type = "button";
     confirm.className =
-      "palette-editor__action-btn palette-editor__action-btn--danger";
-    confirm.textContent = "Delete";
+      "palette-editor__action-btn palette-editor__action-btn--danger palette-editor__action-btn--with-icon";
+    confirm.innerHTML = DELETE_BUTTON_HTML;
     confirm.addEventListener("click", () => {
       overlay.remove();
       void this.deleteCurrent();

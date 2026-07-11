@@ -22,12 +22,11 @@ PickHue lets you grab any color on any page with a precise on-screen magnifier, 
 
 ## Install
 
-> [!IMPORTANT]
-> **v2.0 early access** — [Download the latest release](https://github.com/alex-wilczewski/pickhue/releases/latest) or build from source. The Chrome Web Store listing is being updated; store installs remain on 0.1.1 until review completes.
+> Install from the [Chrome Web Store](https://chromewebstore.google.com/) (search **PickHue**), or load a release zip / build from source below.
 
-**Quick install (recommended)**
+**Quick install (developer / GitHub)**
 
-1. Download **pickhue-2.0.0.zip** from [Releases](https://github.com/alex-wilczewski/pickhue/releases/tag/2.0.0)
+1. Download **pickhue-2.0.1.zip** from [Releases](https://github.com/alex-wilczewski/pickhue/releases/latest)
 2. Unzip the archive
 3. Open `chrome://extensions` (or `brave://extensions`)
 4. Enable **Developer mode** → **Load unpacked** → select the unzipped folder (must contain `manifest.json`)
@@ -38,7 +37,7 @@ PickHue lets you grab any color on any page with a precise on-screen magnifier, 
 ```bash
 git clone https://github.com/alex-wilczewski/pickhue.git
 cd pickhue
-git checkout 2.0.0
+git checkout 2.0.1
 npm install
 npm run build
 ```

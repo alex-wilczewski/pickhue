@@ -2,11 +2,22 @@
 
 All notable changes to PickHue are documented here.
 
+## [2.0.1] — 2026-07-11
+
+Minor polish and fixes on top of the 2.0 palettes release.
+
+- Palette title reads as an editable field at rest (clearer rename cue)
+- Saved Palettes list scrolls after five rows, with a soft fade hint and contained wheel scrolling
+- **Move** action in the palette row menu to drag-reorder saved palettes
+- Saved palette preview capped at four swatches
+- Delete and settings icons use filled glyphs; swatch remove control centering and contrast polish
+- Recents picker dialog edge/bleed fixes at high zoom
+
 ## [2.0.0] — 2026-07-08
 
 **Palettes release.** Organize colors into named palettes, import from design tools, and save picks without leaving the page.
 
-> **Early access:** Install from this GitHub release while the Chrome Web Store listing is updated for review. Existing Web Store users stay on 0.1.1 until the store update is approved.
+> **Shipped:** Palettes release. Chrome Web Store and GitHub both carry 2.0.x.
 
 ### Saved palettes
 
