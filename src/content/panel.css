@@ -283,6 +283,44 @@ button {
   height: 44px;
   border-radius: 12px;
   background: var(--swatch-track);
+  /* Covers trailing swatch + gap (Figma mask width). */
+  --swatch-fade-w: 40px;
+  /* Opaque well match for fade overlays (token-based, theme-aware). */
+  --swatch-fade: color-mix(in srgb, var(--text) 15%, var(--bg));
+}
+
+.panel__swatches-wrap::before,
+.panel__swatches-wrap::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: var(--swatch-fade-w);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  z-index: 3;
+}
+
+.panel__swatches-wrap::before {
+  left: 0;
+  border-radius: 12px 0 0 12px;
+  background: linear-gradient(to right, var(--swatch-fade), transparent);
+}
+
+.panel__swatches-wrap::after {
+  right: 0;
+  border-radius: 0 12px 12px 0;
+  background: linear-gradient(to left, var(--swatch-fade), transparent);
+}
+
+.panel__swatches-wrap.has-more-left::before,
+.panel__swatches-wrap.has-more-right::after {
+  opacity: 1;
+}
+
+.panel[data-theme="light"] .panel__swatches-wrap {
+  --swatch-fade: color-mix(in srgb, var(--text) 9%, var(--bg));
 }
 
 .panel__swatches-empty {
@@ -341,11 +379,11 @@ button {
   scroll-padding-right: 4px;
 }
 
-.panel__swatches .swatch {
+.panel__swatches .swatch-item {
   scroll-snap-align: start;
 }
 
-.panel__swatches.snap-end .swatch {
+.panel__swatches.snap-end .swatch-item {
   scroll-snap-align: end;
 }
 
@@ -357,6 +395,13 @@ button {
      honored equally at both the start and the end of the scroll range. */
   padding: 0 4px;
   width: max-content;
+}
+
+.swatch-item {
+  position: relative;
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
 }
 
 .swatch {
@@ -398,6 +443,65 @@ button {
   z-index: 1;
   outline: 2px solid var(--accent);
   outline-offset: -1px;
+}
+
+.swatch-remove {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  z-index: 2;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 1px solid var(--swatch-border);
+  border-radius: 50%;
+  background: var(--close-bg);
+  color: var(--text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease, background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.swatch-remove:hover {
+  background: var(--close-bg-hover);
+  border-color: var(--swatch-border-hover);
+}
+
+.swatch-remove .icon {
+  display: block;
+  flex-shrink: 0;
+}
+
+.swatch-item:hover .swatch-remove,
+.swatch-item:focus-within .swatch-remove {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.swatch-tooltip {
+  position: absolute;
+  z-index: 40;
+  pointer-events: none;
+  padding: 5px 9px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  line-height: 1.3;
+  white-space: nowrap;
+  background: var(--menu-bg);
+  color: var(--text);
+  border: 1px solid var(--divider);
+  box-shadow:
+    0 8px 20px rgba(0, 0, 0, 0.32),
+    0 1px 3px rgba(0, 0, 0, 0.18);
+}
+
+.swatch-tooltip[hidden] {
+  display: none;
 }
 
 .panel__palettes-wrap {
@@ -545,6 +649,7 @@ button {
   padding: 0 0 0 6px;
   line-height: 1;
   text-align: left;
+  transform: translateY(1px);
 }
 
 .panel__palette-name {
@@ -556,7 +661,6 @@ button {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  transform: translateY(1px);
 }
 
 .panel__palette-strip {
@@ -567,10 +671,12 @@ button {
 }
 
 .panel__palette-dot {
+  display: block;
   width: 16px;
   height: 16px;
   border-radius: 5px;
-  border: 1px solid var(--swatch-border);
+  border: 0;
+  box-shadow: inset 0 0 0 1px var(--swatch-border);
   flex-shrink: 0;
 }
 
@@ -813,6 +919,24 @@ button {
   background: var(--swatch-track);
 }
 
+.palette-menu__item--action {
+  justify-content: flex-start;
+  color: var(--accent-link);
+  font-weight: 500;
+}
+
+.palette-menu__item--action:hover {
+  color: var(--text);
+  background: transparent;
+}
+
+.palette-menu__divider {
+  height: 1px;
+  margin: 4px 8px;
+  background: var(--divider);
+  flex-shrink: 0;
+}
+
 .palette-menu__item--danger {
   color: var(--danger);
 }
@@ -824,16 +948,19 @@ button {
 
 .palette-menu__item--with-icon {
   justify-content: flex-start;
-  gap: 5px;
+  gap: 8px;
 }
 
-.palette-menu__item--with-icon .icon--delete {
+.palette-menu__item--with-icon .icon {
   flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  /* Lift glyph to the text's cap-height optical center. */
   margin-top: -1px;
 }
 
 .palette-row-menu {
-  min-width: 140px;
+  min-width: 150px;
   max-height: none;
   overflow: visible;
 }
@@ -851,10 +978,12 @@ button {
 }
 
 .palette-menu__dot {
+  display: block;
   width: 10px;
   height: 10px;
   border-radius: 3px;
-  border: 1px solid var(--swatch-border);
+  border: 0;
+  box-shadow: inset 0 0 0 1px var(--swatch-border);
 }
 
 /* Palette editor — 18px inset → 284px content (7×36px + 6×4px gaps + 8px box pad) */
@@ -931,6 +1060,15 @@ button {
   padding: 8px 4px;
 }
 
+.palette-editor__empty-action {
+  display: inline;
+  font-size: inherit;
+  font-weight: 500;
+  line-height: inherit;
+  padding: 0;
+  vertical-align: baseline;
+}
+
 .palette-editor__swatch-item {
   position: relative;
   flex: 0 0 36px;
@@ -956,7 +1094,7 @@ button {
   position: absolute;
   top: -4px;
   right: -4px;
-  z-index: 1;
+  z-index: 2;
   width: 16px;
   height: 16px;
   padding: 0;
@@ -969,6 +1107,7 @@ button {
   justify-content: center;
   opacity: 0;
   pointer-events: none;
+  transition: opacity 0.12s ease, background-color 0.15s ease, border-color 0.15s ease;
 }
 
 .palette-editor__remove:hover {
@@ -1184,16 +1323,19 @@ button {
   position: absolute;
   z-index: 2;
   pointer-events: none;
-  padding: 4px 8px;
-  border-radius: 6px;
+  padding: 5px 9px;
+  border-radius: 8px;
   font-size: 11px;
   font-weight: 500;
+  letter-spacing: 0.01em;
   line-height: 1.3;
   white-space: nowrap;
-  background: var(--bg);
+  background: var(--menu-bg);
   color: var(--text);
   border: 1px solid var(--divider);
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.28);
+  box-shadow:
+    0 8px 20px rgba(0, 0, 0, 0.32),
+    0 1px 3px rgba(0, 0, 0, 0.18);
 }
 
 .palette-editor__recents-tooltip[hidden] {
@@ -1378,7 +1520,8 @@ button {
 
 .format-switcher__btn {
   min-width: 29px;
-  padding: 0 5px;
+  /* Caps sit high in the em box — extra top pad shifts text only, not the chip. */
+  padding: 2px 5px 0;
   font-size: 10.5px;
   font-weight: 500;
   letter-spacing: 0.01em;

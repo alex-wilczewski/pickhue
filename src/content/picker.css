@@ -153,21 +153,32 @@
 }
 
 .pickhue-copy-toast__save {
+  appearance: none;
+  -webkit-appearance: none;
   font: inherit;
   font-size: 12px;
   font-weight: 500;
   color: #b8f06a;
-  background: none;
+  background: transparent;
   border: none;
-  padding: 4px 0;
+  border-radius: 0;
+  box-shadow: none;
+  outline: none;
+  padding: 2px 0;
   margin-left: 4px;
   cursor: pointer;
   white-space: nowrap;
   flex-shrink: 0;
+  text-decoration: none;
+  line-height: 1.2;
 }
 
-.pickhue-copy-toast__save:hover {
-  text-decoration: underline;
+.pickhue-copy-toast__save:hover,
+.pickhue-copy-toast__save:focus-visible {
+  color: #f6f6f6;
+  background: transparent;
+  text-decoration: none;
+  box-shadow: none;
 }
 
 .palette-menu {
@@ -185,24 +196,59 @@
   font-family: "Geist", "Segoe UI", system-ui, sans-serif;
 }
 
+.palette-menu--toast {
+  background: rgba(20, 20, 20, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.28);
+  max-height: 220px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.palette-menu--toast::-webkit-scrollbar {
+  display: none;
+}
+
 .palette-menu__item {
+  appearance: none;
+  -webkit-appearance: none;
   width: 100%;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
   padding: 8px 10px;
-  border-radius: 6px;
+  border-radius: 8px;
+  font: inherit;
   font-size: 12px;
+  font-weight: 500;
   text-align: left;
   color: #f6f6f6;
-  background: none;
+  background: transparent;
   border: none;
   cursor: pointer;
 }
 
 .palette-menu__item:hover {
   background: rgba(246, 246, 246, 0.1);
+}
+
+.palette-menu__item--action {
+  justify-content: flex-start;
+  color: #b8f06a;
+}
+
+.palette-menu__item--action:hover {
+  color: #f6f6f6;
+  background: transparent;
+}
+
+.palette-menu__divider {
+  height: 1px;
+  margin: 4px 8px;
+  background: rgba(246, 246, 246, 0.12);
+  flex-shrink: 0;
 }
 
 .palette-menu__name {

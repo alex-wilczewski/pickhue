@@ -5,17 +5,23 @@ import { EyedropperOverlay } from "./picker";
 const LOADED_FLAG = "__pickhueContentLoaded";
 const PICKER_STYLE_ID = "pickhue-picker-styles";
 
-if (!(globalThis as Record<string, unknown>)[LOADED_FLAG]) {
-  (globalThis as Record<string, unknown>)[LOADED_FLAG] = true;
-
-  // The eyedropper overlay lives in the page's light DOM, so its styles must be
-  // injected here (this bundle is self-contained — no manifest content CSS).
-  if (!document.getElementById(PICKER_STYLE_ID)) {
-    const style = document.createElement("style");
+function ensurePickerStyles(): void {
+  // Always refresh — open tabs can keep a stale style tag after extension reload.
+  let style = document.getElementById(PICKER_STYLE_ID) as HTMLStyleElement | null;
+  if (!style) {
+    style = document.createElement("style");
     style.id = PICKER_STYLE_ID;
-    style.textContent = pickerCss;
     (document.head ?? document.documentElement).append(style);
   }
+  style.textContent = pickerCss;
+}
+
+// The eyedropper overlay / copy toast live in the page's light DOM, so styles
+ // must be injected here (this bundle is self-contained — no manifest content CSS).
+ensurePickerStyles();
+
+if (!(globalThis as Record<string, unknown>)[LOADED_FLAG]) {
+  (globalThis as Record<string, unknown>)[LOADED_FLAG] = true;
 
   // Wait for the browser to composite a frame. `captureVisibleTab` snapshots the
   // last painted frame, so after removing the panel we must let the page repaint

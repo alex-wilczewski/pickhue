@@ -2,6 +2,19 @@
 
 All notable changes to PickHue are documented here.
 
+## [2.0.2] — 2026-07-12
+
+UI polish and reliability follow-up to 2.0.1.
+
+- Custom swatch tooltips (PickHue-styled) with delayed show so remove controls appear first
+- Restore hover-to-remove on Recent Colors swatches
+- Unified outline icon set; palette row menu icons for Rename, Export, Move, and Delete
+- Broader export options: hex list, CSS variables, Adobe ASE, and PickHue JSON
+- Empty palette editor “Select Color” inline shortcut
+- Wheel scrolling fixes for import textarea / internal scroll regions
+- Toast palette-menu dismiss reliability and recent-color storage normalization
+- Format label optical centering and recent-colors well padding restored
+
 ## [2.0.1] — 2026-07-11
 
 Minor polish and fixes on top of the 2.0 palettes release.

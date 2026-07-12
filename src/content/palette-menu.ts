@@ -8,6 +8,29 @@ export interface PaletteMenuCallbacks {
 
 const MENU_CLASS = "palette-menu";
 const MENU_GAP = 6;
+/** Matches palette row → gear menu spacing in the panel. */
+const TOAST_MENU_GAP = 4;
+
+/** Active menu dismisser — replace/remove always runs this so listeners don't leak. */
+let activeMenuDismiss: (() => void) | null = null;
+
+function dismissActiveMenu(): void {
+  const dismiss = activeMenuDismiss;
+  activeMenuDismiss = null;
+  dismiss?.();
+}
+
+function registerMenuDismiss(dismiss: () => void): () => void {
+  dismissActiveMenu();
+  const wrapped = (): void => {
+    if (activeMenuDismiss === wrapped) {
+      activeMenuDismiss = null;
+    }
+    dismiss();
+  };
+  activeMenuDismiss = wrapped;
+  return wrapped;
+}
 
 function positionMenuInPanel(
   menu: HTMLElement,
@@ -40,27 +63,116 @@ function positionMenuInPanel(
   menu.style.top = `${top}px`;
 }
 
+function positionMenuFixed(
+  menu: HTMLElement,
+  anchorRect: DOMRect,
+  options?: {
+    align?: "start" | "center";
+    preferAbove?: boolean;
+    gap?: number;
+    /** Visual surface for vertical clearance (e.g. whole toast, not just the button). */
+    edgeRect?: DOMRect;
+  }
+): void {
+  const menuWidth = menu.offsetWidth;
+  const menuHeight = menu.offsetHeight;
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+  const pad = 8;
+  const gap = options?.gap ?? MENU_GAP;
+  const edgeRect = options?.edgeRect ?? anchorRect;
+
+  const preferredLeft =
+    options?.align === "center"
+      ? anchorRect.left + anchorRect.width / 2 - menuWidth / 2
+      : anchorRect.left;
+  const maxLeft = Math.max(pad, viewportWidth - menuWidth - pad);
+  const left = Math.min(Math.max(pad, preferredLeft), maxLeft);
+
+  const belowTop = edgeRect.bottom + gap;
+  const aboveTop = edgeRect.top - menuHeight - gap;
+  const fitsBelow = belowTop + menuHeight <= viewportHeight - pad;
+  const fitsAbove = aboveTop >= pad;
+
+  let top: number;
+  if (options?.preferAbove) {
+    top = fitsAbove
+      ? aboveTop
+      : fitsBelow
+        ? belowTop
+        : Math.max(pad, viewportHeight - menuHeight - pad);
+  } else {
+    top = fitsBelow
+      ? belowTop
+      : fitsAbove
+        ? aboveTop
+        : Math.min(
+            Math.max(pad, belowTop),
+            Math.max(pad, viewportHeight - menuHeight - pad)
+          );
+  }
+
+  menu.style.left = `${left}px`;
+  menu.style.top = `${top}px`;
+}
+
+function applyToastMenuSurface(menu: HTMLElement): void {
+  // Toast menus mount in the page light DOM. Host stylesheets and a stale
+  // injected picker stylesheet can beat class rules, so pin the surface here.
+  menu.style.position = "fixed";
+  menu.style.zIndex = "2147483647";
+  menu.style.background = "rgba(20, 20, 20, 0.94)";
+  menu.style.border = "1px solid rgba(255, 255, 255, 0.08)";
+  menu.style.borderRadius = "14px";
+  menu.style.boxShadow = "0 16px 40px rgba(0, 0, 0, 0.28)";
+  menu.style.padding = "4px";
+  menu.style.minWidth = "160px";
+  menu.style.maxWidth = "240px";
+  menu.style.maxHeight = "220px";
+  menu.style.overflowY = "auto";
+  menu.style.fontFamily = '"Geist", "Segoe UI", system-ui, sans-serif';
+}
+
+function styleToastActionItem(item: HTMLElement): void {
+  item.style.color = "#b8f06a";
+  item.style.justifyContent = "flex-start";
+  item.style.fontWeight = "500";
+  item.style.background = "transparent";
+  item.addEventListener("mouseenter", () => {
+    item.style.color = "#f6f6f6";
+    item.style.background = "transparent";
+  });
+  item.addEventListener("mouseleave", () => {
+    item.style.color = "#b8f06a";
+    item.style.background = "transparent";
+  });
+}
+
 export function showPaletteMenu(
   root: Document | ShadowRoot,
   anchor: HTMLElement,
   palettes: ColorPalette[],
   callbacks: PaletteMenuCallbacks
 ): () => void {
-  const existing = root.querySelector(`.${MENU_CLASS}`);
-  existing?.remove();
+  dismissActiveMenu();
 
   const menu = document.createElement("div");
   menu.className = MENU_CLASS;
   menu.setAttribute("role", "menu");
 
+  const isToastAnchor = Boolean(anchor.closest(".pickhue-copy-toast"));
+
   const addItem = (
     label: string,
     action: () => void | Promise<void>,
-    options?: { swatches?: string[] }
+    options?: { swatches?: string[]; actionItem?: boolean }
   ): void => {
     const item = document.createElement("button");
     item.type = "button";
     item.className = "palette-menu__item";
+    if (options?.actionItem) {
+      item.classList.add("palette-menu__item--action");
+    }
     item.setAttribute("role", "menuitem");
 
     const name = document.createElement("span");
@@ -80,6 +192,10 @@ export function showPaletteMenu(
       item.append(strip);
     }
 
+    if (isToastAnchor && options?.actionItem) {
+      styleToastActionItem(item);
+    }
+
     item.addEventListener("click", (event) => {
       event.stopPropagation();
       void action();
@@ -96,7 +212,21 @@ export function showPaletteMenu(
     );
   }
 
-  addItem("+ New palette", () => callbacks.onNewPalette());
+  if (palettes.length > 0) {
+    const divider = document.createElement("div");
+    divider.className = "palette-menu__divider";
+    divider.setAttribute("role", "separator");
+    if (isToastAnchor) {
+      divider.style.height = "1px";
+      divider.style.margin = "4px 8px";
+      divider.style.background = "rgba(246, 246, 246, 0.12)";
+    }
+    menu.append(divider);
+  }
+
+  addItem("New palette", () => callbacks.onNewPalette(), {
+    actionItem: true,
+  });
 
   const panel = anchor.closest(".panel");
   if (panel) {
@@ -107,20 +237,28 @@ export function showPaletteMenu(
       positionMenuInPanel(menu, anchorRect, panelRect);
     });
   } else {
+    menu.classList.add("palette-menu--toast");
+    applyToastMenuSurface(menu);
     document.body.append(menu);
-    const rect = anchor.getBoundingClientRect();
-    menu.style.position = "fixed";
-    menu.style.left = `${rect.left}px`;
-    menu.style.top = `${rect.bottom + 6}px`;
-    menu.style.zIndex = "2147483647";
+    const toastEl = anchor.closest(".pickhue-copy-toast");
+    requestAnimationFrame(() => {
+      const buttonRect = anchor.getBoundingClientRect();
+      const toastRect = toastEl?.getBoundingClientRect();
+      positionMenuFixed(menu, buttonRect, {
+        align: "center",
+        preferAbove: true,
+        gap: TOAST_MENU_GAP,
+        edgeRect: toastRect ?? buttonRect,
+      });
+    });
   }
 
-  const dismiss = (): void => {
+  const dismiss = registerMenuDismiss((): void => {
     menu.remove();
     document.removeEventListener("click", onOutside, true);
     document.removeEventListener("keydown", onEscape, true);
     callbacks.onClose?.();
-  };
+  });
 
   const onOutside = (event: MouseEvent): void => {
     if (!menu.contains(event.target as Node)) {
@@ -153,8 +291,7 @@ export function showActionMenu(
   anchor: HTMLElement,
   items: ActionMenuItem[]
 ): () => void {
-  const existing = root.querySelector(`.${MENU_CLASS}`);
-  existing?.remove();
+  dismissActiveMenu();
 
   const menu = document.createElement("div");
   menu.className = MENU_CLASS;
@@ -184,18 +321,18 @@ export function showActionMenu(
     });
   } else {
     document.body.append(menu);
-    const rect = anchor.getBoundingClientRect();
     menu.style.position = "fixed";
-    menu.style.left = `${rect.left}px`;
-    menu.style.top = `${rect.bottom + 6}px`;
     menu.style.zIndex = "2147483647";
+    requestAnimationFrame(() => {
+      positionMenuFixed(menu, anchor.getBoundingClientRect());
+    });
   }
 
-  const dismiss = (): void => {
+  const dismiss = registerMenuDismiss((): void => {
     menu.remove();
     document.removeEventListener("click", onOutside, true);
     document.removeEventListener("keydown", onEscape, true);
-  };
+  });
 
   const onOutside = (event: MouseEvent): void => {
     if (!menu.contains(event.target as Node)) {

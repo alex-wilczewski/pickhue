@@ -1,11 +1,13 @@
 import panelCss from "./panel.css?inline";
-import { DELETE_BUTTON_HTML, DELETE_ICON_HTML, SETTINGS_ICON_HTML } from "./icons";
+import { DELETE_BUTTON_HTML, DELETE_ICON_HTML, EXPORT_ICON_HTML, MOVE_ICON_HTML, REMOVE_SWATCH_ICON_HTML, RENAME_ICON_HTML, SETTINGS_ICON_HTML } from "./icons";
 import { PaletteEditorView } from "./palette-editor";
 import { showActionMenu } from "./palette-menu";
+import { SwatchTooltipController } from "./swatch-tooltip";
 import { copyText } from "../shared/clipboard";
 import { formatColor } from "../shared/colors";
 import {
   exportPalettesAseFile,
+  exportPalettesCss,
   exportPalettesHexList,
   exportPaletteAseFile,
 } from "../shared/palette-formats";
@@ -17,6 +19,7 @@ import {
   deletePalette,
   getPalettes,
   getSettings,
+  removeRecentColor,
   reorderPalettes,
   saveSettings,
   StorageQuotaError,
@@ -28,6 +31,39 @@ const HOST_ID = "pickhue-panel-host";
 const PANEL_STYLES_ID = "pickhue-panel-styles";
 const CLOSE_ANIM_MS = 180;
 const PALETTE_PREVIEW_COUNT = 4;
+
+/** True when wheel should scroll an element inside the panel, not be blocked. */
+function isInternallyScrollable(
+  target: EventTarget | null,
+  boundary: Element
+): boolean {
+  if (!(target instanceof Element)) {
+    return false;
+  }
+  let el: Element | null = target;
+  while (el && el !== boundary) {
+    if (
+      el instanceof HTMLTextAreaElement ||
+      el instanceof HTMLSelectElement
+    ) {
+      return true;
+    }
+    const style = window.getComputedStyle(el);
+    const overflowY = style.overflowY;
+    const overflowX = style.overflowX;
+    const canY =
+      (overflowY === "auto" || overflowY === "scroll") &&
+      el.scrollHeight > el.clientHeight + 1;
+    const canX =
+      (overflowX === "auto" || overflowX === "scroll") &&
+      el.scrollWidth > el.clientWidth + 1;
+    if (canY || canX) {
+      return true;
+    }
+    el = el.parentElement;
+  }
+  return false;
+}
 
 /** Strip :host reset — it must not run against popup page roots. */
 function panelCssForPage(css: string): string {
@@ -200,6 +236,7 @@ export class PanelController {
   private paletteDropHandled = false;
   private readonly selectedRecents = new Set<string>();
   private editor: PaletteEditorView | null = null;
+  private swatchTooltip: SwatchTooltipController | null = null;
   private reopenEditorAfterPick = false;
   private hostResizeObserver: ResizeObserver | null = null;
   private readonly systemThemeQuery = window.matchMedia(
@@ -454,6 +491,7 @@ export class PanelController {
         this.shadow = null;
         this.panelEl = null;
         this.editor = null;
+        this.disposeSwatchTooltip();
         this.view = "home";
       }
       this.closeTimer = 0;
@@ -583,6 +621,7 @@ export class PanelController {
 
     this.panelEl =
       this.ref<HTMLElement>("panel") ?? this.shadow.querySelector(".panel");
+    this.ensureSwatchTooltip();
     this.initEditor();
     this.bindEvents();
     this.attachHostResizeObserver();
@@ -604,8 +643,21 @@ export class PanelController {
     if (this.panelEl) {
       document.body.append(this.panelEl);
     }
+    this.ensureSwatchTooltip();
     this.initEditor();
     this.bindEvents();
+  }
+
+  private ensureSwatchTooltip(): void {
+    if (this.swatchTooltip || !this.panelEl) {
+      return;
+    }
+    this.swatchTooltip = new SwatchTooltipController(this.panelEl);
+  }
+
+  private disposeSwatchTooltip(): void {
+    this.swatchTooltip?.dispose();
+    this.swatchTooltip = null;
   }
 
   private initEditor(): void {
@@ -624,6 +676,8 @@ export class PanelController {
         });
       },
       onLayoutChange: () => this.scheduleHostSize(),
+      getSwatchTooltip: () => this.swatchTooltip,
+      onSelectColor: () => this.startPickerFromEditor(),
     });
   }
 
@@ -646,13 +700,20 @@ export class PanelController {
       this.panelEl;
     mount?.addEventListener("keydown", stopKeys);
     mount?.addEventListener("keyup", stopKeys);
-    // Keep host-page scroll from moving while the cursor is over the panel.
+    // Isolate panel wheel from the host page in the *bubble* phase so child
+    // handlers (recent-colors scroller, palette list) still receive the event.
+    // Allow native scrolling inside textareas / overflow regions (import, etc.).
     mount?.addEventListener(
       "wheel",
       (event) => {
+        if (isInternallyScrollable(event.target, mount)) {
+          event.stopPropagation();
+          return;
+        }
+        event.preventDefault();
         event.stopPropagation();
       },
-      { passive: true, capture: true }
+      { passive: false }
     );
 
     this.ref<HTMLButtonElement>("select-color")?.addEventListener("click", () => {
@@ -661,11 +722,7 @@ export class PanelController {
         return;
       }
       if (this.view === "editor") {
-        const paletteId = this.editor?.getPaletteId();
-        if (paletteId) {
-          this.reopenEditorAfterPick = true;
-          this.options.onStartPicker({ paletteId });
-        }
+        this.startPickerFromEditor();
         return;
       }
       this.options.onStartPicker();
@@ -975,6 +1032,23 @@ export class PanelController {
       return;
     }
 
+    if (scroller.dataset.scrollFadeBound !== "true") {
+      scroller.dataset.scrollFadeBound = "true";
+      scroller.addEventListener(
+        "scroll",
+        () => {
+          this.swatchTooltip?.hide();
+          this.syncRecentColorsOverflow();
+        },
+        { passive: true }
+      );
+    }
+
+    if (scroller.dataset.scrollWheelBound === "true") {
+      return;
+    }
+    scroller.dataset.scrollWheelBound = "true";
+
     let targetScroll = 0;
     let scrollRafId = 0;
     let direction = 1;
@@ -986,6 +1060,7 @@ export class PanelController {
     const settleSnap = (): void => {
       scroller.classList.toggle("snap-end", direction >= 0);
       scroller.classList.add("is-snapping");
+      this.syncRecentColorsOverflow();
     };
 
     const animateScroll = (): void => {
@@ -999,18 +1074,22 @@ export class PanelController {
         return;
       }
 
-      scroller.scrollLeft += diff * 0.22;
+      // Gentler lerp than 0.22 — still settles cleanly into native 4px snap.
+      scroller.scrollLeft += diff * 0.12;
+      this.syncRecentColorsOverflow();
       scrollRafId = requestAnimationFrame(animateScroll);
     };
 
     scroller.addEventListener(
       "wheel",
       (event) => {
-        const delta = event.deltaY !== 0 ? event.deltaY : event.deltaX;
-        if (delta === 0 || maxScroll() === 0) {
+        const rawDelta = event.deltaY !== 0 ? event.deltaY : event.deltaX;
+        if (rawDelta === 0 || maxScroll() === 0) {
           return;
         }
         event.preventDefault();
+        // Soften trackpad/wheel steps so travel feels less snappy.
+        const delta = rawDelta * 0.72;
         direction = delta > 0 ? 1 : -1;
         scroller.classList.remove("is-snapping");
 
@@ -1031,6 +1110,22 @@ export class PanelController {
     );
   }
 
+  private syncRecentColorsOverflow(): void {
+    const scroller = this.ref<HTMLElement>("scroller");
+    const wrap = scroller?.closest(".panel__swatches-wrap");
+    if (!scroller || !(wrap instanceof HTMLElement)) {
+      return;
+    }
+
+    const maxScroll = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+    const hasOverflow = maxScroll > 1;
+    const atStart = scroller.scrollLeft <= 1;
+    const atEnd = scroller.scrollLeft >= maxScroll - 1;
+
+    wrap.classList.toggle("has-more-left", hasOverflow && !atStart);
+    wrap.classList.toggle("has-more-right", hasOverflow && !atEnd);
+  }
+
   private bindSettingsControls(): void {
     this.ref<HTMLElement>("theme-switcher")
       ?.querySelectorAll<HTMLButtonElement>("[data-theme-mode]")
@@ -1047,6 +1142,15 @@ export class PanelController {
           void this.updateColorFormat(button.dataset.format as ColorFormat);
         });
       });
+  }
+
+  private startPickerFromEditor(): void {
+    const paletteId = this.editor?.getPaletteId();
+    if (!paletteId) {
+      return;
+    }
+    this.reopenEditorAfterPick = true;
+    this.options.onStartPicker({ paletteId });
   }
 
   private showView(view: PanelView): void {
@@ -1336,12 +1440,17 @@ export class PanelController {
       return;
     }
 
+    this.swatchTooltip?.hide();
+
     const isEmpty = this.settings.recentColors.length === 0;
     empty.hidden = !isEmpty;
     empty.classList.toggle("is-hidden", !isEmpty);
 
     track.replaceChildren(
       ...this.settings.recentColors.map((hex, index) => {
+        const item = document.createElement("div");
+        item.className = "swatch-item";
+
         const button = document.createElement("button");
         button.type = "button";
         button.className = "swatch";
@@ -1355,13 +1464,11 @@ export class PanelController {
           button.classList.add("swatch--enter");
         }
         button.style.backgroundColor = hex;
-        button.title = formatColor(hex, this.settings.colorFormat);
+        const label = formatColor(hex, this.settings.colorFormat);
         button.setAttribute("role", "listitem");
         button.setAttribute(
           "aria-label",
-          this.selectionMode
-            ? `Select ${button.title}`
-            : `Copy ${button.title}`
+          this.selectionMode ? `Select ${label}` : `Copy ${label}`
         );
         button.addEventListener("click", () => {
           if (this.selectionMode) {
@@ -1377,12 +1484,44 @@ export class PanelController {
           }
           void this.handleSwatchClick(hex);
         });
-        return button;
+
+        item.append(button);
+
+        if (!this.selectionMode) {
+          const remove = document.createElement("button");
+          remove.type = "button";
+          remove.className = "swatch-remove";
+          remove.setAttribute("aria-label", `Remove ${label}`);
+          remove.innerHTML = REMOVE_SWATCH_ICON_HTML;
+          remove.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            void this.handleRemoveRecentColor(hex);
+          });
+          item.append(remove);
+        }
+
+        this.swatchTooltip?.attach(item, () =>
+          formatColor(hex, this.settings.colorFormat)
+        );
+
+        return item;
       })
     );
 
     this.hadRecentColors = !isEmpty;
     this.updateSelectionToggle();
+    requestAnimationFrame(() => this.syncRecentColorsOverflow());
+  }
+
+  private async handleRemoveRecentColor(hex: string): Promise<void> {
+    this.swatchTooltip?.hide();
+    this.settings = await removeRecentColor(hex);
+    this.selectedRecents.delete(hex.toUpperCase());
+    this.renderRecentColors();
+    this.syncPaletteListState();
+    this.updateFooterCta();
+    this.scheduleHostSize();
   }
 
   private renderPalettes(): void {
@@ -1544,22 +1683,21 @@ export class PanelController {
       }
       item.addEventListener("click", (event) => {
         event.stopPropagation();
+        dismiss();
         void action();
-        menu.remove();
       });
       menu.append(item);
     };
 
     addItem("Rename", () => {
       void this.openEditor(palette, { focusName: true });
-    });
-    addItem("Export", () => {
-      exportPaletteAseFile(palette);
-      this.showToast("Downloaded .ase file");
-    });
+    }, { iconHtml: RENAME_ICON_HTML });
+    addItem("Export…", () => {
+      this.showExportMenuForPalettes(anchor, [palette]);
+    }, { iconHtml: EXPORT_ICON_HTML });
     addItem("Move", () => {
       this.setMoveMode(palette.id);
-    });
+    }, { iconHtml: MOVE_ICON_HTML });
     addItem("Delete", () => {
       this.showDeletePaletteConfirm(palette);
     }, { danger: true, iconHtml: DELETE_ICON_HTML });
@@ -1742,26 +1880,50 @@ export class PanelController {
       this.showToast("No palettes to export");
       return;
     }
+    this.showExportMenuForPalettes(anchor, this.palettes);
+  }
 
+  private showExportMenuForPalettes(
+    anchor: HTMLElement,
+    palettes: ColorPalette[]
+  ): void {
+    if (palettes.length === 0) {
+      this.showToast("No palettes to export");
+      return;
+    }
+
+    const single = palettes.length === 1;
     showActionMenu(this.getRoot(), anchor, [
+      {
+        label: "Hex list — Canva, anywhere",
+        action: () => {
+          copyText(exportPalettesHexList(palettes));
+          this.showToast("Hex list copied");
+        },
+      },
+      {
+        label: "CSS variables — Figma, code",
+        action: () => {
+          copyText(exportPalettesCss(palettes));
+          this.showToast("CSS variables copied");
+        },
+      },
       {
         label: "Adobe ASE (.ase)",
         action: () => {
-          exportPalettesAseFile(this.palettes);
-          this.showToast("Downloaded pickhue-palettes.ase");
+          if (single) {
+            exportPaletteAseFile(palettes[0]!);
+            this.showToast("Downloaded .ase file");
+          } else {
+            exportPalettesAseFile(palettes);
+            this.showToast("Downloaded pickhue-palettes.ase");
+          }
         },
       },
       {
-        label: "Color list",
+        label: "PickHue JSON (backup)",
         action: () => {
-          copyText(exportPalettesHexList(this.palettes));
-          this.showToast("Color list copied");
-        },
-      },
-      {
-        label: "PickHue JSON",
-        action: () => {
-          copyText(exportPalettes(this.palettes));
+          copyText(exportPalettes(palettes));
           this.showToast("JSON copied to clipboard");
         },
       },

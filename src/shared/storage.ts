@@ -74,6 +74,13 @@ function normalizePaletteColors(colors: string[]): string[] {
   return normalized;
 }
 
+function normalizeRecentColors(colors: unknown): string[] {
+  if (!Array.isArray(colors)) {
+    return [];
+  }
+  return normalizePaletteColors(colors as string[]).slice(0, 24);
+}
+
 function normalizePalette(palette: ColorPalette): ColorPalette {
   return {
     ...palette,
@@ -107,7 +114,7 @@ export async function getSettings(): Promise<Settings> {
     ...stored,
     themeMode: normalizeThemeMode(stored),
     colorFormat: normalizeColorFormat(stored),
-    recentColors: stored?.recentColors ?? DEFAULT_SETTINGS.recentColors,
+    recentColors: normalizeRecentColors(stored?.recentColors),
   };
 }
 
@@ -132,6 +139,19 @@ export async function addRecentColor(hex: string): Promise<Settings> {
 
 export async function promoteRecentColor(hex: string): Promise<Settings> {
   return addRecentColor(hex);
+}
+
+export async function removeRecentColor(hex: string): Promise<Settings> {
+  const settings = await getSettings();
+  let normalized: string;
+  try {
+    normalized = normalizeHex(hex);
+  } catch {
+    return settings;
+  }
+  return saveSettings({
+    recentColors: settings.recentColors.filter((color) => color !== normalized),
+  });
 }
 
 export async function getPalettesStore(): Promise<PalettesStore> {

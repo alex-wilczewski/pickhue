@@ -12,6 +12,10 @@ import type { ColorFormat } from "../shared/types";
 
 const PICKER_ID = "pickhue-picker-root";
 const TOAST_ID = "pickhue-copy-toast";
+let toastHideTimer = 0;
+let toastPointerTimer = 0;
+let toastPaletteMenuOpen = false;
+let toastMenuOpenId = 0;
 const LOUPE_SIZE = 144;
 const SAMPLE = 11;
 const ZOOM_MIN = 0.4;
@@ -563,6 +567,9 @@ export function showCopyToast(formatted: string, hex: string): void {
     document.documentElement.append(toast);
   }
 
+  toastPaletteMenuOpen = false;
+  clearToastHideTimers();
+
   toast.innerHTML = `
     <span class="pickhue-copy-toast__swatch" style="background-color:${hex}"></span>
     <span class="pickhue-copy-toast__text">Copied ${formatted}</span>
@@ -579,24 +586,63 @@ export function showCopyToast(formatted: string, hex: string): void {
   });
 
   requestAnimationFrame(() => toast?.classList.add("is-visible"));
+  scheduleToastHide(4000);
+}
 
-  window.setTimeout(() => {
-    toast?.classList.remove("is-visible");
-    window.setTimeout(() => {
-      if (toast) {
-        toast.style.pointerEvents = "none";
-      }
+function clearToastHideTimers(): void {
+  window.clearTimeout(toastHideTimer);
+  window.clearTimeout(toastPointerTimer);
+  toastHideTimer = 0;
+  toastPointerTimer = 0;
+}
+
+function scheduleToastHide(delayMs: number): void {
+  clearToastHideTimers();
+  const toast = document.getElementById(TOAST_ID) as HTMLDivElement | null;
+  if (!toast) {
+    return;
+  }
+
+  toastHideTimer = window.setTimeout(() => {
+    if (toastPaletteMenuOpen) {
+      return;
+    }
+    toast.classList.remove("is-visible");
+    toastPointerTimer = window.setTimeout(() => {
+      toast.style.pointerEvents = "none";
     }, 220);
-  }, 4000);
+  }, delayMs);
 }
 
 async function openPickToastPaletteMenu(
   anchor: HTMLButtonElement,
   hex: string
 ): Promise<void> {
+  const toast = document.getElementById(TOAST_ID) as HTMLDivElement | null;
+  if (!toast) {
+    return;
+  }
+
+  clearToastHideTimers();
+  toastPaletteMenuOpen = true;
+  toast.classList.add("is-visible");
+  toast.style.pointerEvents = "auto";
+
+  const openId = ++toastMenuOpenId;
   const palettes = await getPalettes();
+  if (
+    openId !== toastMenuOpenId ||
+    !document.getElementById(TOAST_ID) ||
+    !document.body.contains(anchor)
+  ) {
+    return;
+  }
+
+  let completed = false;
+
   showPaletteMenu(document, anchor, palettes, {
     onSelect: async (paletteId) => {
+      completed = true;
       try {
         await addColorToPalette(paletteId, hex);
         showPaletteSavedToast(hex, "Saved to palette");
@@ -605,12 +651,20 @@ async function openPickToastPaletteMenu(
       }
     },
     onNewPalette: async () => {
+      completed = true;
       try {
         await createPalette("Untitled palette", [hex]);
         showPaletteSavedToast(hex, "Created new palette");
       } catch {
         showPaletteSavedToast(hex, "Could not create palette");
       }
+    },
+    onClose: () => {
+      if (openId !== toastMenuOpenId) {
+        return;
+      }
+      toastPaletteMenuOpen = false;
+      scheduleToastHide(completed ? 2000 : 2500);
     },
   });
 }
@@ -620,6 +674,8 @@ function showPaletteSavedToast(hex: string, message: string): void {
   if (!toast) {
     return;
   }
+  toast.classList.add("is-visible");
+  toast.style.pointerEvents = "auto";
   const text = toast.querySelector(".pickhue-copy-toast__text");
   const saveBtn = toast.querySelector(".pickhue-copy-toast__save");
   if (text) {

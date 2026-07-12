@@ -3,8 +3,10 @@ import { formatColor } from "../shared/colors";
 import { parseHexInput } from "../shared/palette-io";
 import {
   exportPaletteAseFile,
+  exportPalettesCss,
   exportPalettesHexList,
 } from "../shared/palette-formats";
+import { exportPalette } from "../shared/palette-io";
 import {
   addColorToPalette,
   addColorsToPalette,
@@ -21,12 +23,19 @@ import {
   PLUS_ICON_HTML,
   REMOVE_SWATCH_ICON_HTML,
 } from "./icons";
+import { showActionMenu } from "./palette-menu";
+import {
+  SWATCH_TOOLTIP_DELAY_MS,
+  type SwatchTooltipController,
+} from "./swatch-tooltip";
 
 export interface PaletteEditorCallbacks {
   onBack: () => void;
   onToast: (message: string, hex?: string) => void;
   onPaletteChanged: () => void;
   onLayoutChange: () => void;
+  getSwatchTooltip: () => SwatchTooltipController | null;
+  onSelectColor: () => void;
 }
 
 export interface PaletteEditorOpenOptions {
@@ -185,6 +194,7 @@ export class PaletteEditorView {
 
   private render(): void {
     const palette = this.palette;
+    this.callbacks.getSwatchTooltip()?.hide();
     if (!palette) {
       this.container.replaceChildren();
       return;
@@ -246,7 +256,15 @@ export class PaletteEditorView {
       emptyBox.className = "palette-editor__swatches";
       const empty = document.createElement("p");
       empty.className = "palette-editor__empty";
-      empty.textContent = "No colors yet — use Select Color below.";
+      empty.append("No colors yet — use ");
+      const selectLink = document.createElement("button");
+      selectLink.type = "button";
+      selectLink.className = "panel__section-action palette-editor__empty-action";
+      selectLink.textContent = "Select Color";
+      selectLink.addEventListener("click", () => {
+        this.callbacks.onSelectColor();
+      });
+      empty.append(selectLink, " below.");
       emptyBox.append(empty);
       swatchSection.append(emptyBox);
     } else {
@@ -314,8 +332,8 @@ export class PaletteEditorView {
     exportBtn.type = "button";
     exportBtn.className = "palette-editor__action-btn";
     exportBtn.textContent = "Export";
-    exportBtn.addEventListener("click", () => {
-      void this.exportCurrent();
+    exportBtn.addEventListener("click", (event) => {
+      this.showExportMenu(event.currentTarget as HTMLButtonElement);
     });
     const deleteBtn = document.createElement("button");
     deleteBtn.type = "button";
@@ -340,9 +358,9 @@ export class PaletteEditorView {
     button.type = "button";
     button.className = "swatch";
     button.style.backgroundColor = hex;
-    button.title = formatColor(hex, this.colorFormat);
+    const label = formatColor(hex, this.colorFormat);
     button.setAttribute("role", "listitem");
-    button.setAttribute("aria-label", `Copy ${button.title}`);
+    button.setAttribute("aria-label", `Copy ${label}`);
     button.addEventListener("click", () => {
       const formatted = formatColor(hex, this.colorFormat);
       copyText(formatted);
@@ -356,10 +374,34 @@ export class PaletteEditorView {
     remove.innerHTML = REMOVE_SWATCH_ICON_HTML;
     remove.addEventListener("click", (event) => {
       event.stopPropagation();
+      this.callbacks.getSwatchTooltip()?.hide();
       void this.removeColor(hex);
     });
 
+    let blockDrag = false;
+    remove.addEventListener("pointerdown", (event) => {
+      event.stopPropagation();
+      blockDrag = true;
+    });
+    item.addEventListener("pointerdown", (event) => {
+      if (
+        !(event.target instanceof Element) ||
+        !event.target.closest(".palette-editor__remove")
+      ) {
+        blockDrag = false;
+      }
+    });
+    item.addEventListener("dragstart", (event) => {
+      this.callbacks.getSwatchTooltip()?.hide();
+      if (blockDrag) {
+        event.preventDefault();
+      }
+    });
+
     item.append(button, remove);
+    this.callbacks.getSwatchTooltip()?.attach(item, () =>
+      formatColor(hex, this.colorFormat)
+    );
     return item;
   }
 
@@ -562,23 +604,49 @@ export class PaletteEditorView {
     grid.className = "palette-editor__swatches-grid";
 
     const tooltip = document.createElement("div");
-    tooltip.className = "palette-editor__recents-tooltip";
+    tooltip.className = "swatch-tooltip palette-editor__recents-tooltip";
     tooltip.hidden = true;
+    tooltip.setAttribute("role", "tooltip");
 
     const selected = new Set<string>();
+    let tipTimer = 0;
+    let tipAnchor: HTMLElement | null = null;
+
+    const hideTip = (): void => {
+      window.clearTimeout(tipTimer);
+      tipTimer = 0;
+      tipAnchor = null;
+      tooltip.hidden = true;
+      tooltip.textContent = "";
+    };
 
     const positionTooltip = (anchor: HTMLElement): void => {
       const dialogRect = dialog.getBoundingClientRect();
       const anchorRect = anchor.getBoundingClientRect();
       const tipWidth = tooltip.offsetWidth;
+      const tipHeight = tooltip.offsetHeight;
       const left =
         anchorRect.left -
         dialogRect.left +
         anchorRect.width / 2 -
         tipWidth / 2;
-      const top = anchorRect.top - dialogRect.top - tooltip.offsetHeight - 6;
+      let top = anchorRect.bottom - dialogRect.top + 6;
+      const maxTop = Math.max(4, dialog.clientHeight - tipHeight - 4);
+      if (top > maxTop) {
+        top = anchorRect.top - dialogRect.top - tipHeight - 6;
+      }
       tooltip.style.left = `${Math.max(4, Math.min(left, dialog.clientWidth - tipWidth - 4))}px`;
-      tooltip.style.top = `${Math.max(4, top)}px`;
+      tooltip.style.top = `${Math.max(4, Math.min(top, maxTop))}px`;
+    };
+
+    const scheduleTip = (anchor: HTMLElement, hex: string): void => {
+      window.clearTimeout(tipTimer);
+      tipTimer = window.setTimeout(() => {
+        tipAnchor = anchor;
+        tooltip.textContent = formatColor(hex, this.colorFormat);
+        tooltip.hidden = false;
+        positionTooltip(anchor);
+      }, SWATCH_TOOLTIP_DELAY_MS);
     };
 
     const confirm = document.createElement("button");
@@ -616,17 +684,17 @@ export class PaletteEditorView {
       });
 
       pick.addEventListener("mouseenter", () => {
-        tooltip.textContent = formatColor(hex, this.colorFormat);
-        tooltip.hidden = false;
-        positionTooltip(pick);
+        scheduleTip(pick, hex);
       });
 
       pick.addEventListener("mousemove", () => {
-        positionTooltip(pick);
+        if (tipAnchor === pick && !tooltip.hidden) {
+          positionTooltip(pick);
+        }
       });
 
       pick.addEventListener("mouseleave", () => {
-        tooltip.hidden = true;
+        hideTip();
       });
 
       item.append(pick);
@@ -641,8 +709,12 @@ export class PaletteEditorView {
     cancel.type = "button";
     cancel.className = "palette-editor__action-btn";
     cancel.textContent = "Cancel";
-    cancel.addEventListener("click", () => overlay.remove());
+    cancel.addEventListener("click", () => {
+      hideTip();
+      overlay.remove();
+    });
     confirm.addEventListener("click", () => {
+      hideTip();
       void this.addFromRecents([...selected]);
       overlay.remove();
     });
@@ -690,13 +762,41 @@ export class PaletteEditorView {
     }
   }
 
-  private async exportCurrent(): Promise<void> {
+  private showExportMenu(anchor: HTMLButtonElement): void {
     if (!this.palette) {
       return;
     }
-    exportPaletteAseFile(this.palette);
-    copyText(exportPalettesHexList([this.palette]));
-    this.callbacks.onToast("Downloaded .ase — color list copied");
+    const palette = this.palette;
+    showActionMenu(this.container.getRootNode() as Document | ShadowRoot, anchor, [
+      {
+        label: "Hex list — Canva, anywhere",
+        action: () => {
+          copyText(exportPalettesHexList([palette]));
+          this.callbacks.onToast("Hex list copied");
+        },
+      },
+      {
+        label: "CSS variables — Figma, code",
+        action: () => {
+          copyText(exportPalettesCss([palette]));
+          this.callbacks.onToast("CSS variables copied");
+        },
+      },
+      {
+        label: "Adobe ASE (.ase)",
+        action: () => {
+          exportPaletteAseFile(palette);
+          this.callbacks.onToast("Downloaded .ase file");
+        },
+      },
+      {
+        label: "PickHue JSON (backup)",
+        action: () => {
+          copyText(exportPalette(palette));
+          this.callbacks.onToast("JSON copied to clipboard");
+        },
+      },
+    ]);
   }
 
   private async deleteCurrent(): Promise<void> {
