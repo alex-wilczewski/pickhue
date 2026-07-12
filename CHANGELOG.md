@@ -11,7 +11,7 @@ UI polish and reliability follow-up to 2.0.1.
 - Unified outline icon set; palette row menu icons for Rename, Export, Move, and Delete
 - Broader export options: hex list, CSS variables, Adobe ASE, and PickHue JSON
 - Empty palette editor “Select Color” inline shortcut
-- Wheel scrolling fixes for import textarea / internal scroll regions
+- Wheel scrolling fixes for import textarea / internal scroll regions; smoother Recent Colors horizontal scroll (no snap jerk)
 - Toast palette-menu dismiss reliability and recent-color storage normalization
 - Format label optical centering and recent-colors well padding restored
 
