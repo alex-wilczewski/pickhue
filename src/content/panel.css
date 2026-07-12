@@ -357,6 +357,7 @@ button {
   align-items: center;
   overflow-x: auto;
   overflow-y: hidden;
+  overscroll-behavior-x: contain;
   border-radius: 12px;
   scrollbar-width: none;
   -ms-overflow-style: none;
@@ -366,15 +367,12 @@ button {
   display: none;
 }
 
-/* The resting inset (4px against the scrolled-to edge) is handed to the browser's
-   native scroll-snap, which aligns to the device-pixel grid the compositor
-   rasterizes to. JS momentum can't do this (programmatic scrollLeft isn't
-   device-pixel-aware), which is why the inset only looked clean when zoomed in.
-   The .is-snapping class is toggled off during an active wheel gesture so the
-   mandatory snap never fights the free-scroll momentum. */
+/* Resting snap used to be CSS mandatory + scroll-behavior:smooth, which fought
+   the wheel lerp and caused a visible jerk/overscroll. Snap is now a soft JS
+   settle after the gesture idles; these classes remain only as a no-op fallback
+   if ever re-enabled without smooth scrolling. */
 .panel__swatches.is-snapping {
-  scroll-snap-type: x mandatory;
-  scroll-behavior: smooth;
+  scroll-snap-type: x proximity;
   scroll-padding-left: 4px;
   scroll-padding-right: 4px;
 }

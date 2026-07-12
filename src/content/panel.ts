@@ -1049,18 +1049,42 @@ export class PanelController {
     }
     scroller.dataset.scrollWheelBound = "true";
 
+    const PAD = 4;
+    const SWATCH = 36;
+    const GAP = 4;
+    const STRIDE = SWATCH + GAP;
+    const SNAP_IDLE_MS = 120;
+
     let targetScroll = 0;
     let scrollRafId = 0;
+    let settleTimer = 0;
     let direction = 1;
     let lastLeft = Number.NaN;
 
     const maxScroll = (): number =>
       Math.max(0, scroller.scrollWidth - scroller.clientWidth);
 
-    const settleSnap = (): void => {
-      scroller.classList.toggle("snap-end", direction >= 0);
-      scroller.classList.add("is-snapping");
-      this.syncRecentColorsOverflow();
+    /** Soft snap targets that preserve the 4px edge inset (no CSS mandatory snap). */
+    const nearestSnap = (scrollLeft: number, dir: number): number => {
+      const max = maxScroll();
+      if (max <= 0) {
+        return 0;
+      }
+
+      if (dir >= 0) {
+        // Forward: align item end to the right inset (matches prior snap-end).
+        const index = Math.round(
+          (scrollLeft - SWATCH - 2 * PAD + scroller.clientWidth) / STRIDE
+        );
+        return Math.min(
+          max,
+          Math.max(0, index * STRIDE + SWATCH + 2 * PAD - scroller.clientWidth)
+        );
+      }
+
+      // Backward: align item start to the left inset.
+      const index = Math.round(scrollLeft / STRIDE);
+      return Math.min(max, Math.max(0, index * STRIDE));
     };
 
     const animateScroll = (): void => {
@@ -1069,15 +1093,35 @@ export class PanelController {
       lastLeft = scroller.scrollLeft;
 
       if (Math.abs(diff) <= 0.5 || (stuck && Math.abs(diff) <= 4)) {
+        scroller.scrollLeft = targetScroll;
         scrollRafId = 0;
-        settleSnap();
+        this.syncRecentColorsOverflow();
         return;
       }
 
-      // Gentler lerp than 0.22 — still settles cleanly into native 4px snap.
-      scroller.scrollLeft += diff * 0.12;
+      scroller.scrollLeft += diff * 0.16;
       this.syncRecentColorsOverflow();
       scrollRafId = requestAnimationFrame(animateScroll);
+    };
+
+    const runToward = (next: number): void => {
+      targetScroll = Math.min(maxScroll(), Math.max(0, next));
+      lastLeft = Number.NaN;
+      if (scrollRafId === 0) {
+        scrollRafId = requestAnimationFrame(animateScroll);
+      }
+    };
+
+    const scheduleSoftSnap = (): void => {
+      window.clearTimeout(settleTimer);
+      settleTimer = window.setTimeout(() => {
+        const basis =
+          scrollRafId !== 0 ? targetScroll : scroller.scrollLeft;
+        const snapped = nearestSnap(basis, direction);
+        if (Math.abs(snapped - basis) > 0.5) {
+          runToward(snapped);
+        }
+      }, SNAP_IDLE_MS);
     };
 
     scroller.addEventListener(
@@ -1088,23 +1132,18 @@ export class PanelController {
           return;
         }
         event.preventDefault();
-        // Soften trackpad/wheel steps so travel feels less snappy.
+
+        // Soften trackpad/wheel steps; keep free-scroll until the gesture idles.
         const delta = rawDelta * 0.72;
         direction = delta > 0 ? 1 : -1;
-        scroller.classList.remove("is-snapping");
+        scroller.classList.remove("is-snapping", "snap-end");
+        window.clearTimeout(settleTimer);
 
-        const running = scrollRafId !== 0;
-        if (!running) {
+        if (scrollRafId === 0) {
           targetScroll = scroller.scrollLeft;
-          lastLeft = Number.NaN;
         }
-        targetScroll = Math.min(
-          maxScroll(),
-          Math.max(0, targetScroll + delta)
-        );
-        if (!running) {
-          scrollRafId = requestAnimationFrame(animateScroll);
-        }
+        runToward(targetScroll + delta);
+        scheduleSoftSnap();
       },
       { passive: false }
     );
