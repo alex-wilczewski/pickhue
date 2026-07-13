@@ -24,7 +24,7 @@ export const MOVE_ICON_HTML = `<svg class="icon icon--move" viewBox="0 0 24 24" 
 export const DELETE_ICON_HTML = `<svg class="icon icon--delete" viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>`;
 
 /** Compact X for swatch remove controls. */
-export const REMOVE_SWATCH_ICON_HTML = `<svg class="icon icon--remove" viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>`;
+export const REMOVE_SWATCH_ICON_HTML = `<svg class="icon icon--remove" viewBox="0 0 24 24" width="10" height="10" aria-hidden="true"><path d="M8 8l8 8M16 8 8 16" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" fill="none"/></svg>`;
 
 /** Delete button label with icon. */
 export const DELETE_BUTTON_HTML = `${DELETE_ICON_HTML}<span>Delete</span>`;

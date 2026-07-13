@@ -630,11 +630,14 @@ async function openPickToastPaletteMenu(
 
   const openId = ++toastMenuOpenId;
   const palettes = await getPalettes();
+  // Toast mounts on documentElement (not body), so use document.contains.
   if (
     openId !== toastMenuOpenId ||
     !document.getElementById(TOAST_ID) ||
-    !document.body.contains(anchor)
+    !document.contains(anchor)
   ) {
+    toastPaletteMenuOpen = false;
+    scheduleToastHide(2500);
     return;
   }
 

@@ -14,6 +14,10 @@ UI polish and reliability follow-up to 2.0.1.
 - Wheel scrolling fixes for import textarea / internal scroll regions; smoother Recent Colors horizontal scroll (no snap jerk)
 - Toast palette-menu dismiss reliability and recent-color storage normalization
 - Format label optical centering and recent-colors well padding restored
+- Concentric swatch / track radii (11 + 4 = 15) across Recent Colors, palette editor, and From Recents
+- Compact, centered swatch remove badges; From Recents button and Add confirm polish
+- Palette row hover stroke; stronger accent hover in dark mode; gear icon optical sizing
+- Fix pick-toast “Save to palette” menu (toast mounts on `documentElement`)
 
 ## [2.0.1] — 2026-07-11
 

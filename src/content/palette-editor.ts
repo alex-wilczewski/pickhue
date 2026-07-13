@@ -18,11 +18,7 @@ import {
   updatePalette,
 } from "../shared/storage";
 import type { ColorFormat, ColorPalette } from "../shared/types";
-import {
-  DELETE_BUTTON_HTML,
-  PLUS_ICON_HTML,
-  REMOVE_SWATCH_ICON_HTML,
-} from "./icons";
+import { DELETE_BUTTON_HTML, REMOVE_SWATCH_ICON_HTML } from "./icons";
 import { showActionMenu } from "./palette-menu";
 import {
   SWATCH_TOOLTIP_DELAY_MS,
@@ -289,9 +285,8 @@ export class PaletteEditorView {
 
     const recentsBtn = document.createElement("button");
     recentsBtn.type = "button";
-    recentsBtn.className =
-      "palette-editor__add-btn palette-editor__add-btn--with-icon";
-    recentsBtn.innerHTML = `${PLUS_ICON_HTML}<span>From Recents</span>`;
+    recentsBtn.className = "palette-editor__add-btn palette-editor__add-btn--recents";
+    recentsBtn.textContent = "From Recents";
     recentsBtn.disabled = this.recentColors.length === 0;
     recentsBtn.addEventListener("click", () => {
       this.showRecentsPicker();
@@ -652,7 +647,7 @@ export class PaletteEditorView {
     const confirm = document.createElement("button");
     confirm.type = "button";
     confirm.className = "palette-editor__recents-confirm";
-    confirm.textContent = "Add Selected";
+    confirm.textContent = "Add";
     confirm.disabled = true;
 
     const syncConfirm = (): void => {

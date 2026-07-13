@@ -31,15 +31,19 @@ npm run typecheck        # optional sanity check
 | **Privacy policy** | https://pickhue.site/privacy |
 | **Support** (optional) | https://github.com/alex-wilczewski/pickhue/issues |
 
-## Store “What’s new” (2.0.2)
+## Store listing notes
 
-> Custom swatch tooltips, unified icons, clearer export options, and small reliability polish.
+Chrome Web Store **does not** provide a separate “What’s new” field for extension updates. Uploading a new package + **Submit for review** is enough.
+
+Optional (skip if you want zero listing copy changes): on the **Store listing** tab, prepend a short line to the detailed description, e.g.
+
+> What’s new in 2.0.2: Custom swatch tooltips, unified icons, clearer export options, and small reliability polish.
 
 ## Submit (update existing listing)
 
 1. Dashboard → your **PickHue** item → **Package** → upload `pickhue-2.0.2.zip`
-2. Add the “What’s new” note above (listing description can stay as for 2.0)
-3. Confirm privacy policy URL is current
+2. Confirm the draft package shows version **2.0.2**
+3. Confirm privacy policy URL is current (no listing rewrite required)
 4. **Submit for review**
 
 ## After approval

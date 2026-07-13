@@ -14,6 +14,8 @@ A small follow-up to 2.0.1: custom swatch tooltips, unified icons, clearer expor
 - Export menus include hex list, CSS variables, Adobe ASE, and PickHue JSON
 - Empty palette “Select Color” text links straight into the picker
 - Scroll, toast-menu, and storage reliability polish
+- Concentric swatch radii, compact remove badges, From Recents / Add polish
+- Palette row hover, accent hover contrast, and pick-toast Save to palette fix
 
 ---
 

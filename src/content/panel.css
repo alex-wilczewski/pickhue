@@ -47,7 +47,7 @@ button {
   --divider: rgba(246, 246, 246, 0.12);
   --accent: #87d624;
   --accent-text: #141414;
-  --accent-hover: #9ae836;
+  --accent-hover: #a3ee3a;
   --accent-link: #b8f06a;
   --danger: #d64545;
   --danger-text: #ffffff;
@@ -281,7 +281,7 @@ button {
   position: relative;
   width: 280px;
   height: 44px;
-  border-radius: 12px;
+  border-radius: 15px;
   background: var(--swatch-track);
   /* Covers trailing swatch + gap (Figma mask width). */
   --swatch-fade-w: 40px;
@@ -304,13 +304,13 @@ button {
 
 .panel__swatches-wrap::before {
   left: 0;
-  border-radius: 12px 0 0 12px;
+  border-radius: 15px 0 0 15px;
   background: linear-gradient(to right, var(--swatch-fade), transparent);
 }
 
 .panel__swatches-wrap::after {
   right: 0;
-  border-radius: 0 12px 12px 0;
+  border-radius: 0 15px 15px 0;
   background: linear-gradient(to left, var(--swatch-fade), transparent);
 }
 
@@ -358,7 +358,7 @@ button {
   overflow-x: auto;
   overflow-y: hidden;
   overscroll-behavior-x: contain;
-  border-radius: 12px;
+  border-radius: 15px;
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
@@ -405,7 +405,9 @@ button {
 .swatch {
   width: 36px;
   height: 36px;
-  border-radius: 12px;
+  /* Concentric radius system shared by the recent-colors and editor tracks:
+     swatch (inner) radius 11 + track inset 4px = track (outer) radius 15. */
+  border-radius: 11px;
   border: 1px solid var(--swatch-border);
   flex: 0 0 auto;
   transition: transform 0.12s ease, border-color 0.15s ease;
@@ -445,11 +447,14 @@ button {
 
 .swatch-remove {
   position: absolute;
-  top: -4px;
-  right: -4px;
+  /* Floats on the swatch's top-right corner with a small, consistent gap from
+     the track's top edge. Kept identical to the editor badge
+     (.palette-editor__remove) so both read the same. */
+  top: -2px;
+  right: -2px;
   z-index: 2;
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   padding: 0;
   border: 1px solid var(--swatch-border);
   border-radius: 50%;
@@ -584,12 +589,22 @@ button {
   min-height: var(--palette-row-h, 37px);
   flex-shrink: 0;
   border-radius: 10px;
+  border: 1px solid transparent;
   background-color: var(--swatch-track);
   box-sizing: border-box;
 }
 
 .panel__palettes--pick-mode .panel__palette-row {
   cursor: pointer;
+}
+
+/* Subtle stroke on hover to signal the row is clickable, matching the
+   swatch/button hover language (border-color change, no box-shadow — the inset
+   shadow rendered with jagged corners inside the scroll container). Skipped in
+   pick/move mode where the accent outline already communicates state. */
+.panel__palettes:not(.panel__palettes--pick-mode):not(.panel__palettes--move-mode)
+  .panel__palette-row:hover {
+  border-color: var(--swatch-border-hover);
 }
 
 .panel__palettes--pick-mode:not(.panel__palettes--palette-chosen) .panel__palette-row {
@@ -715,8 +730,8 @@ button {
 
 .panel__palette-menu-btn .icon--settings {
   display: block;
-  width: 14px;
-  height: 14px;
+  width: 13px;
+  height: 13px;
   flex-shrink: 0;
 }
 
@@ -1035,7 +1050,7 @@ button {
 }
 
 .palette-editor__swatches {
-  border-radius: 12px;
+  border-radius: 15px;
   background: var(--swatch-track);
   padding: 4px;
   box-sizing: border-box;
@@ -1090,11 +1105,12 @@ button {
 
 .palette-editor__remove {
   position: absolute;
-  top: -4px;
-  right: -4px;
+  /* Matches the recent-colors delete badge (.swatch-remove). */
+  top: -2px;
+  right: -2px;
   z-index: 2;
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   padding: 0;
   border: 1px solid var(--swatch-border);
   border-radius: 50%;
@@ -1139,6 +1155,15 @@ button {
   background: var(--swatch-track);
   border: 1px solid var(--control-border);
   color: var(--text);
+  transition:
+    background-color 0.22s ease,
+    border-color 0.22s ease,
+    color 0.22s ease;
+}
+
+.palette-editor__add-btn:hover:not(:disabled) {
+  background: var(--close-bg);
+  border-color: var(--swatch-border-hover);
 }
 
 .palette-editor__add-btn:disabled {
@@ -1146,11 +1171,11 @@ button {
   cursor: not-allowed;
 }
 
-.palette-editor__add-btn--with-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
+.palette-editor__add-btn--recents {
+  display: block;
+  width: 100%;
+  text-align: center;
+  line-height: 1;
 }
 
 .palette-editor__paste {
@@ -1184,6 +1209,15 @@ button {
   background: var(--swatch-track);
   border: 1px solid var(--control-border);
   color: var(--text);
+  transition:
+    background-color 0.22s ease,
+    border-color 0.22s ease,
+    color 0.22s ease;
+}
+
+.palette-editor__action-btn:hover:not(:disabled):not(.palette-editor__action-btn--danger) {
+  background: var(--close-bg);
+  border-color: var(--swatch-border-hover);
 }
 
 .palette-editor__action-btn--danger {
@@ -1229,12 +1263,16 @@ button {
   flex-direction: column;
   align-items: stretch;
   width: fit-content;
+  min-width: min(240px, 100%);
   max-width: 100%;
   max-height: 100%;
   overflow: visible;
   background: transparent;
   border: none;
-  border-radius: 12px;
+  /* Continues the concentric progression: swatch 11 + 4 = track 15, track 15 +
+     4 = shell 19, so the outer box stays rounder than the swatch track it
+     wraps. (::before inherits this radius.) */
+  border-radius: 19px;
   padding: 14px 13px;
   box-sizing: border-box;
 }
@@ -1299,7 +1337,7 @@ button {
 .palette-editor__recents-swatches .swatch {
   width: var(--recents-swatch);
   height: var(--recents-swatch);
-  border-radius: 10px;
+  border-radius: 11px;
 }
 
 .palette-editor__recents-swatches::-webkit-scrollbar {
@@ -1352,6 +1390,11 @@ button {
   flex: 1;
 }
 
+.palette-editor__recents-actions .palette-editor__action-btn,
+.palette-editor__recents-confirm {
+  white-space: nowrap;
+}
+
 .palette-editor__recents-confirm {
   flex: 1;
   padding: 8px 12px;
@@ -1385,7 +1428,7 @@ button {
 .palette-editor__confirm-dialog {
   width: 100%;
   background: var(--menu-bg);
-  border-radius: 12px;
+  border-radius: 14px;
   padding: 14px;
   border: 1px solid var(--divider);
 }
