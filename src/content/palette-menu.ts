@@ -116,34 +116,63 @@ function positionMenuFixed(
   menu.style.top = `${top}px`;
 }
 
-function applyToastMenuSurface(menu: HTMLElement): void {
+function applyToastMenuSurface(
+  menu: HTMLElement,
+  theme: "light" | "dark"
+): void {
   // Toast menus mount in the page light DOM. Host stylesheets and a stale
   // injected picker stylesheet can beat class rules, so pin the surface here.
+  menu.dataset.theme = theme;
   menu.style.position = "fixed";
   menu.style.zIndex = "2147483647";
-  menu.style.background = "rgba(20, 20, 20, 0.94)";
-  menu.style.border = "1px solid rgba(255, 255, 255, 0.08)";
   menu.style.borderRadius = "14px";
-  menu.style.boxShadow = "0 16px 40px rgba(0, 0, 0, 0.28)";
   menu.style.padding = "4px";
   menu.style.minWidth = "160px";
   menu.style.maxWidth = "240px";
   menu.style.maxHeight = "220px";
   menu.style.overflowY = "auto";
   menu.style.fontFamily = '"Geist", "Segoe UI", system-ui, sans-serif';
+
+  if (theme === "light") {
+    menu.style.background = "rgba(255, 255, 255, 0.94)";
+    menu.style.border = "1px solid rgba(20, 20, 20, 0.14)";
+    menu.style.boxShadow = "0 16px 40px rgba(0, 0, 0, 0.12)";
+    menu.style.color = "#141414";
+  } else {
+    menu.style.background = "rgba(20, 20, 20, 0.94)";
+    menu.style.border = "1px solid rgba(255, 255, 255, 0.08)";
+    menu.style.boxShadow = "0 16px 40px rgba(0, 0, 0, 0.28)";
+    menu.style.color = "#f6f6f6";
+  }
 }
 
-function styleToastActionItem(item: HTMLElement): void {
-  item.style.color = "#b8f06a";
+function styleToastMenuItem(item: HTMLElement, theme: "light" | "dark"): void {
+  const text = theme === "light" ? "#141414" : "#f6f6f6";
+  const hoverBg =
+    theme === "light" ? "rgba(20, 20, 20, 0.08)" : "rgba(246, 246, 246, 0.1)";
+  item.style.color = text;
+  item.style.background = "transparent";
+  item.addEventListener("mouseenter", () => {
+    item.style.background = hoverBg;
+  });
+  item.addEventListener("mouseleave", () => {
+    item.style.background = "transparent";
+  });
+}
+
+function styleToastActionItem(item: HTMLElement, theme: "light" | "dark"): void {
+  const link = theme === "light" ? "#3d6b0f" : "#b8f06a";
+  const hover = theme === "light" ? "#141414" : "#f6f6f6";
+  item.style.color = link;
   item.style.justifyContent = "flex-start";
   item.style.fontWeight = "500";
   item.style.background = "transparent";
   item.addEventListener("mouseenter", () => {
-    item.style.color = "#f6f6f6";
+    item.style.color = hover;
     item.style.background = "transparent";
   });
   item.addEventListener("mouseleave", () => {
-    item.style.color = "#b8f06a";
+    item.style.color = link;
     item.style.background = "transparent";
   });
 }
@@ -161,6 +190,13 @@ export function showPaletteMenu(
   menu.setAttribute("role", "menu");
 
   const isToastAnchor = Boolean(anchor.closest(".pickhue-copy-toast"));
+  const toastTheme =
+    (anchor.closest(".pickhue-copy-toast")?.getAttribute("data-theme") as
+      | "light"
+      | "dark"
+      | null) === "light"
+      ? "light"
+      : "dark";
 
   const addItem = (
     label: string,
@@ -192,8 +228,12 @@ export function showPaletteMenu(
       item.append(strip);
     }
 
-    if (isToastAnchor && options?.actionItem) {
-      styleToastActionItem(item);
+    if (isToastAnchor) {
+      if (options?.actionItem) {
+        styleToastActionItem(item, toastTheme);
+      } else {
+        styleToastMenuItem(item, toastTheme);
+      }
     }
 
     item.addEventListener("click", (event) => {
@@ -219,7 +259,10 @@ export function showPaletteMenu(
     if (isToastAnchor) {
       divider.style.height = "1px";
       divider.style.margin = "4px 8px";
-      divider.style.background = "rgba(246, 246, 246, 0.12)";
+      divider.style.background =
+        toastTheme === "light"
+          ? "rgba(20, 20, 20, 0.14)"
+          : "rgba(246, 246, 246, 0.12)";
     }
     menu.append(divider);
   }
@@ -238,7 +281,7 @@ export function showPaletteMenu(
     });
   } else {
     menu.classList.add("palette-menu--toast");
-    applyToastMenuSurface(menu);
+    applyToastMenuSurface(menu, toastTheme);
     document.body.append(menu);
     const toastEl = anchor.closest(".pickhue-copy-toast");
     requestAnimationFrame(() => {

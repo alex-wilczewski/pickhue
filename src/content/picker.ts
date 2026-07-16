@@ -1,6 +1,7 @@
 import { copyText } from "../shared/clipboard";
 import { formatColor } from "../shared/colors";
 import { colorDistanceSq, probeDomColor } from "../shared/dom-color";
+import { resolveTheme } from "../shared/theme";
 import { showPaletteMenu } from "./palette-menu";
 import {
   addColorToPalette,
@@ -70,6 +71,7 @@ export class EyedropperOverlay {
   private rafId = 0;
   private hasPointer = false;
   private colorFormat: ColorFormat = "hex";
+  private uiTheme: "light" | "dark" = "dark";
   private zoom = ZOOM_DEFAULT;
   private lastPickedHex: string | null = null;
   private hint: HTMLParagraphElement | null = null;
@@ -139,6 +141,7 @@ export class EyedropperOverlay {
 
     const settings = await getSettings();
     this.colorFormat = settings.colorFormat;
+    this.uiTheme = resolveTheme(settings.themeMode);
 
     const response = (await chrome.runtime.sendMessage({
       type: "CAPTURE_TAB",
@@ -340,6 +343,7 @@ export class EyedropperOverlay {
     this.root = document.createElement("div");
     this.root.id = PICKER_ID;
     this.root.className = "pickhue-picker";
+    this.root.dataset.theme = this.uiTheme;
 
     this.loupe = document.createElement("div");
     this.loupe.className = "pickhue-loupe";
@@ -558,6 +562,10 @@ export class EyedropperOverlay {
 }
 
 export function showCopyToast(formatted: string, hex: string): void {
+  void showCopyToastAsync(formatted, hex);
+}
+
+async function showCopyToastAsync(formatted: string, hex: string): Promise<void> {
   let toast = document.getElementById(TOAST_ID) as HTMLDivElement | null;
 
   if (!toast) {
@@ -569,6 +577,9 @@ export function showCopyToast(formatted: string, hex: string): void {
 
   toastPaletteMenuOpen = false;
   clearToastHideTimers();
+
+  const settings = await getSettings();
+  toast.dataset.theme = resolveTheme(settings.themeMode);
 
   toast.innerHTML = `
     <span class="pickhue-copy-toast__swatch" style="background-color:${hex}"></span>

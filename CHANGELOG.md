@@ -2,6 +2,16 @@
 
 All notable changes to PickHue are documented here.
 
+## [2.0.3] — 2026-07-15
+
+Theme-aware picker UI and Save to palette flow polish.
+
+- Loupe instructions and copy toast follow the selected theme (system / light / dark)
+- Light-mode toast and picker hint use the same subtle translucency as dark
+- Save to palette: palettes stay greyed until a recent swatch is selected; gear menu shows disabled instead of vanishing
+- Palette pick pulse uses an inset ring so the animation is not clipped in the scroll list
+- “Add colors” confirm uses accent green (matches Select Color); palettes inactive until selection is ready
+
 ## [2.0.2] — 2026-07-12
 
 UI polish and reliability follow-up to 2.0.1.

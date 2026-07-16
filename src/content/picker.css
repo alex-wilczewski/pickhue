@@ -120,6 +120,17 @@
   color: #b8f06a;
 }
 
+.pickhue-picker[data-theme="light"] .pickhue-picker__hint {
+  background: rgba(255, 255, 255, 0.9);
+  color: rgba(20, 20, 20, 0.88);
+  border-color: rgba(20, 20, 20, 0.14);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
+}
+
+.pickhue-picker[data-theme="light"] .pickhue-picker__hint b {
+  color: #3d6b0f;
+}
+
 .pickhue-copy-toast {
   position: fixed;
   left: 50%;
@@ -144,6 +155,13 @@
   font-weight: 500;
   pointer-events: none;
   transition: transform 0.22s ease, opacity 0.22s ease;
+}
+
+.pickhue-copy-toast[data-theme="light"] {
+  background: rgba(255, 255, 255, 0.94);
+  color: #141414;
+  border-color: rgba(20, 20, 20, 0.14);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.12);
 }
 
 .pickhue-copy-toast.is-visible {
@@ -181,6 +199,15 @@
   box-shadow: none;
 }
 
+.pickhue-copy-toast[data-theme="light"] .pickhue-copy-toast__save {
+  color: #3d6b0f;
+}
+
+.pickhue-copy-toast[data-theme="light"] .pickhue-copy-toast__save:hover,
+.pickhue-copy-toast[data-theme="light"] .pickhue-copy-toast__save:focus-visible {
+  color: #141414;
+}
+
 .palette-menu {
   position: fixed;
   z-index: 2147483647;
@@ -204,6 +231,38 @@
   max-height: 220px;
   scrollbar-width: none;
   -ms-overflow-style: none;
+}
+
+.palette-menu--toast[data-theme="light"] {
+  background: rgba(255, 255, 255, 0.94);
+  border-color: rgba(20, 20, 20, 0.14);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.12);
+  color: #141414;
+}
+
+.palette-menu--toast[data-theme="light"] .palette-menu__item {
+  color: #141414;
+}
+
+.palette-menu--toast[data-theme="light"] .palette-menu__item:hover {
+  background: rgba(20, 20, 20, 0.08);
+}
+
+.palette-menu--toast[data-theme="light"] .palette-menu__item--action {
+  color: #3d6b0f;
+}
+
+.palette-menu--toast[data-theme="light"] .palette-menu__item--action:hover {
+  color: #141414;
+  background: transparent;
+}
+
+.palette-menu--toast[data-theme="light"] .palette-menu__divider {
+  background: rgba(20, 20, 20, 0.14);
+}
+
+.palette-menu--toast[data-theme="light"] .palette-menu__dot {
+  border-color: rgba(20, 20, 20, 0.18);
 }
 
 .palette-menu--toast::-webkit-scrollbar {
@@ -276,6 +335,10 @@
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.18);
   flex-shrink: 0;
+}
+
+.pickhue-copy-toast[data-theme="light"] .pickhue-copy-toast__swatch {
+  border-color: rgba(20, 20, 20, 0.18);
 }
 
 .pickhue-copy-toast__text {

@@ -737,6 +737,9 @@ export class PanelController {
     });
 
     this.ref<HTMLButtonElement>("new-palette")?.addEventListener("click", () => {
+      if (this.selectionMode && !this.canSaveToPalette()) {
+        return;
+      }
       if (this.canSaveToPalette()) {
         this.promptCreatePalette();
         return;
@@ -1519,6 +1522,9 @@ export class PanelController {
             this.renderRecentColors();
             this.syncPaletteListState();
             this.updateFooterCta();
+            if (this.selectedRecents.size === 0) {
+              this.dismissSavePaletteConfirm();
+            }
             return;
           }
           void this.handleSwatchClick(hex);
@@ -1576,6 +1582,7 @@ export class PanelController {
         ? "No palettes yet — use New palette above."
         : "Group colors into named palettes.";
       list.replaceChildren(empty);
+      this.syncPaletteListState();
       this.syncPaletteListOverflow();
       this.scheduleHostSize();
       return;
@@ -1599,8 +1606,13 @@ export class PanelController {
     }
 
     const pickActive = this.canSaveToPalette();
+    const awaitingSelection = this.selectionMode && !pickActive;
     const moveActive = this.moveModePaletteId !== null;
     list.classList.toggle("panel__palettes--pick-mode", pickActive);
+    list.classList.toggle(
+      "panel__palettes--awaiting-selection",
+      awaitingSelection
+    );
     list.classList.toggle(
       "panel__palettes--palette-chosen",
       pickActive && this.selectedPaletteId !== null
@@ -1611,6 +1623,10 @@ export class PanelController {
       const paletteId = row.dataset.paletteId ?? "";
       row.classList.toggle("panel__palette-row--selectable", pickActive);
       row.classList.toggle(
+        "panel__palette-row--awaiting",
+        awaitingSelection
+      );
+      row.classList.toggle(
         "is-selected",
         pickActive && paletteId === this.selectedPaletteId
       );
@@ -1620,13 +1636,22 @@ export class PanelController {
       );
       row.draggable =
         moveActive && paletteId === this.moveModePaletteId;
+      const main = row.querySelector<HTMLButtonElement>(".panel__palette-main");
+      if (main) {
+        main.disabled = awaitingSelection || moveActive;
+      }
       row
-        .querySelector<HTMLElement>(".panel__palette-menu-btn")
-        ?.classList.toggle(
-          "panel__palette-menu-btn--hidden",
-          pickActive || moveActive
-        );
+        .querySelectorAll<HTMLButtonElement>(".panel__palette-menu-btn")
+        .forEach((menuBtn) => {
+          menuBtn.disabled = this.selectionMode || moveActive;
+        });
     });
+
+    const newPaletteBtn = this.ref<HTMLButtonElement>("new-palette");
+    if (newPaletteBtn) {
+      newPaletteBtn.disabled = awaitingSelection;
+      newPaletteBtn.classList.toggle("is-awaiting", awaitingSelection);
+    }
   }
 
   private createPaletteRow(palette: ColorPalette): HTMLElement {
@@ -1639,6 +1664,10 @@ export class PanelController {
     main.className = "panel__palette-main";
     main.addEventListener("click", () => {
       if (this.moveModePaletteId) {
+        return;
+      }
+      // Wait for at least one recent swatch before palette picks are live.
+      if (this.selectionMode && !this.canSaveToPalette()) {
         return;
       }
       if (this.canSaveToPalette()) {
