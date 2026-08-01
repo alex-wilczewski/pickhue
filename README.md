@@ -156,7 +156,7 @@ The logo mark lives at `public/icons/logo-mark.svg`. The toolbar/extension PNGs 
 
 | Permission | Why |
 |---|---|
-| `activeTab`, `tabs`, `host_permissions: <all_urls>` | Capture the visible page so colors can be sampled pixel-accurately |
+| `activeTab`, `host_permissions: <all_urls>` | Capture the visible page so colors can be sampled pixel-accurately |
 | `scripting` | Inject the panel/eyedropper on pages that were already open before install |
 | `storage` | Persist your settings, recent colors, and saved palettes |
 
@@ -165,7 +165,8 @@ The logo mark lives at `public/icons/logo-mark.svg`. The toolbar/extension PNGs 
 ## Roadmap
 
 - [x] Publish to the Chrome Web Store (v0.1.x live)
-- [ ] Chrome Web Store update for v2.0 palettes
+- [x] Palettes release (v2.0.x)
+- [ ] Chrome Web Store update for v2.0.4 (tabs permission removed)
 - [ ] Landing page update for v2.0
 
 ---

@@ -19,10 +19,8 @@
   position: fixed;
   top: 0;
   left: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
+  width: 144px;
+  height: 144px;
   pointer-events: none;
   will-change: transform;
   transition: opacity 0.12s ease;
@@ -68,6 +66,10 @@
 }
 
 .pickhue-loupe__info {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  transform: translateX(-50%);
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -77,6 +79,19 @@
   background: rgba(20, 20, 20, 0.94);
   border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow: 0 10px 26px rgba(0, 0, 0, 0.32);
+  white-space: nowrap;
+  z-index: 1;
+}
+
+.pickhue-loupe.is-info-below .pickhue-loupe__info {
+  bottom: auto;
+  top: calc(100% + 8px);
+}
+
+.pickhue-picker[data-theme="light"] .pickhue-loupe__info {
+  background: rgba(255, 255, 255, 0.94);
+  border-color: rgba(20, 20, 20, 0.14);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.12);
 }
 
 .pickhue-loupe__dot {
@@ -85,6 +100,11 @@
   border-radius: 5px;
   border: 1px solid rgba(255, 255, 255, 0.25);
   background: #141414;
+  flex-shrink: 0;
+}
+
+.pickhue-picker[data-theme="light"] .pickhue-loupe__dot {
+  border-color: rgba(20, 20, 20, 0.22);
 }
 
 .pickhue-loupe__hex {
@@ -97,6 +117,10 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.pickhue-picker[data-theme="light"] .pickhue-loupe__hex {
+  color: #141414;
 }
 
 .pickhue-picker__hint {
@@ -113,6 +137,8 @@
   border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
   pointer-events: none;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
 .pickhue-picker__hint b {
@@ -154,6 +180,8 @@
   font-size: 14px;
   font-weight: 500;
   pointer-events: none;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   transition: transform 0.22s ease, opacity 0.22s ease;
 }
 
@@ -231,6 +259,8 @@
   max-height: 220px;
   scrollbar-width: none;
   -ms-overflow-style: none;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 .palette-menu--toast[data-theme="light"] {

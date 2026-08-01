@@ -3,7 +3,7 @@ import { defineManifest } from "@crxjs/vite-plugin";
 export default defineManifest({
   manifest_version: 3,
   name: "PickHue",
-  version: "2.0.3",
+  version: "2.0.4",
   description: "An elegant color picker for your browser.",
   icons: {
     "16": "icons/icon-16.png",
@@ -26,6 +26,10 @@ export default defineManifest({
   // (dist/content.js) and injected on demand via chrome.scripting. It is not
   // declared here so we never ship the @crxjs dynamic-import loader, which
   // strict page CSPs reject.
-  permissions: ["storage", "activeTab", "scripting", "tabs"],
+  //
+  // Do not request the broad "tabs" permission — chrome.tabs.sendMessage and
+  // chrome.tabs.captureVisibleTab work with activeTab + host access alone
+  // (Chrome Web Store: Purple Potassium).
+  permissions: ["storage", "activeTab", "scripting"],
   host_permissions: ["<all_urls>"],
 });

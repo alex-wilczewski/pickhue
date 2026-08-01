@@ -6,6 +6,7 @@ import { execSync } from "node:child_process";
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { platform } from "node:os";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..");
@@ -27,11 +28,25 @@ for (const file of required) {
   }
 }
 
+const manifest = JSON.parse(
+  readFileSync(join(distDir, "manifest.json"), "utf8")
+);
+if (Array.isArray(manifest.permissions) && manifest.permissions.includes("tabs")) {
+  console.error(
+    'dist/manifest.json still requests the "tabs" permission — remove it before packaging.'
+  );
+  process.exit(1);
+}
+
 if (existsSync(zipPath)) {
   rmSync(zipPath);
 }
 
-const ps = `Compress-Archive -Path '${distDir}\\*' -DestinationPath '${zipPath}' -Force`;
-execSync(`powershell -NoProfile -Command "${ps}"`, { stdio: "inherit" });
+if (platform() === "win32") {
+  const ps = `Compress-Archive -Path '${distDir}\\*' -DestinationPath '${zipPath}' -Force`;
+  execSync(`powershell -NoProfile -Command "${ps}"`, { stdio: "inherit" });
+} else {
+  execSync(`zip -r "${zipPath}" .`, { cwd: distDir, stdio: "inherit" });
+}
 
 console.log(`\nReady to upload: ${zipPath}`);

@@ -15,6 +15,7 @@ import { exportPalettes, importPalettes, importPalettesFromAse } from "../shared
 import {
   addColorsToPalette,
   addRecentColor,
+  clearRecentColors,
   createPalette,
   deletePalette,
   getPalettes,
@@ -92,12 +93,24 @@ const TEMPLATE = `
         <section class="panel__section panel__section--recent">
           <div class="panel__section-head">
             <h2 class="panel__label">Recent Colors</h2>
-            <button type="button" class="panel__section-action" data-ref="select-mode-toggle" hidden>
-              Save to palette
-            </button>
+            <div class="panel__section-actions">
+              <button type="button" class="panel__section-action" data-ref="clear-recents" hidden>
+                Clear all
+              </button>
+              <button type="button" class="panel__section-action" data-ref="select-mode-toggle" hidden>
+                Save to palette
+              </button>
+            </div>
           </div>
           <div class="panel__swatches-wrap">
-            <p class="panel__swatches-empty" data-ref="empty">Colors you select go here.</p>
+            <button
+              type="button"
+              class="panel__swatches-empty"
+              data-ref="empty"
+              aria-label="Select Color"
+            >
+              Colors you select go here.
+            </button>
             <div class="panel__swatches" role="list" data-ref="scroller">
               <div class="panel__swatches-inner" data-ref="track"></div>
             </div>
@@ -144,11 +157,16 @@ const TEMPLATE = `
 
           <div class="panel__setting">
             <span class="panel__setting-label">Format</span>
-            <div class="format-switcher" role="radiogroup" aria-label="Format" data-ref="format-switcher">
-              <button type="button" class="format-switcher__btn" data-format="hex" role="radio" aria-checked="true">HEX</button>
-              <button type="button" class="format-switcher__btn" data-format="rgb" role="radio" aria-checked="false">RGB</button>
-              <button type="button" class="format-switcher__btn" data-format="hsl" role="radio" aria-checked="false">HSL</button>
-              <button type="button" class="format-switcher__btn" data-format="oklch" role="radio" aria-checked="false">OKLCH</button>
+            <div class="format-select" data-ref="format-select-wrap">
+              <select class="format-select__control" aria-label="Color format" data-ref="format-select">
+                <option value="hex">HEX</option>
+                <option value="rgb">RGB</option>
+                <option value="hsl">HSL</option>
+                <option value="oklch">OKLCH</option>
+              </select>
+              <svg class="format-select__chevron" viewBox="0 0 24 24" width="12" height="12" aria-hidden="true">
+                <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+              </svg>
             </div>
           </div>
 
@@ -754,6 +772,20 @@ export class PanelController {
       }
     );
 
+    this.ref<HTMLButtonElement>("clear-recents")?.addEventListener(
+      "click",
+      () => {
+        this.promptClearRecentColors();
+      }
+    );
+
+    this.ref<HTMLButtonElement>("empty")?.addEventListener("click", () => {
+      if (this.selectionMode || this.view !== "home") {
+        return;
+      }
+      this.options.onStartPicker();
+    });
+
     this.ref<HTMLButtonElement>("export-palettes")?.addEventListener(
       "click",
       (event) => {
@@ -1177,13 +1209,13 @@ export class PanelController {
         });
       });
 
-    this.ref<HTMLElement>("format-switcher")
-      ?.querySelectorAll<HTMLButtonElement>("[data-format]")
-      .forEach((button) => {
-        button.addEventListener("click", () => {
-          void this.updateColorFormat(button.dataset.format as ColorFormat);
-        });
-      });
+    this.ref<HTMLSelectElement>("format-select")?.addEventListener(
+      "change",
+      (event) => {
+        const select = event.currentTarget as HTMLSelectElement;
+        void this.updateColorFormat(select.value as ColorFormat);
+      }
+    );
   }
 
   private startPickerFromEditor(): void {
@@ -1274,13 +1306,52 @@ export class PanelController {
 
   private updateSelectionToggle(): void {
     const toggle = this.ref<HTMLButtonElement>("select-mode-toggle");
-    if (!toggle) {
+    const clearBtn = this.ref<HTMLButtonElement>("clear-recents");
+    const hasRecents = this.settings.recentColors.length > 0;
+
+    if (toggle) {
+      toggle.hidden = !hasRecents;
+      toggle.classList.toggle("is-active", this.selectionMode);
+      toggle.textContent = this.selectionMode ? "Cancel" : "Save to palette";
+    }
+
+    if (clearBtn) {
+      clearBtn.hidden = !hasRecents || this.selectionMode;
+      clearBtn.disabled = !hasRecents;
+    }
+  }
+
+  private promptClearRecentColors(): void {
+    if (this.settings.recentColors.length === 0) {
       return;
     }
-    const hasRecents = this.settings.recentColors.length > 0;
-    toggle.hidden = !hasRecents;
-    toggle.classList.toggle("is-active", this.selectionMode);
-    toggle.textContent = this.selectionMode ? "Cancel" : "Save to palette";
+
+    this.removeSavePaletteConfirmOverlay();
+    this.clearPaletteRowSelection();
+
+    const count = this.settings.recentColors.length;
+    this.mountSavePaletteConfirm({
+      title: "Clear recent colors?",
+      message: `Remove all ${count} recent color${count === 1 ? "" : "s"} from this list.`,
+      confirmLabel: "Clear all",
+      danger: true,
+      onConfirm: () => this.clearAllRecentColors(),
+    });
+  }
+
+  private async clearAllRecentColors(): Promise<void> {
+    try {
+      this.settings = await clearRecentColors();
+      this.selectedRecents.clear();
+      this.setSelectionMode(false);
+      this.renderRecentColors();
+      this.syncPaletteListState();
+      this.updateFooterCta();
+      this.scheduleHostSize();
+      this.showToast("Recent colors cleared");
+    } catch (error) {
+      this.handleStorageError(error);
+    }
   }
 
   private updateFooterCta(): void {
@@ -1367,6 +1438,7 @@ export class PanelController {
     title: string;
     message: string;
     confirmLabel: string;
+    danger?: boolean;
     onConfirm: () => void | Promise<void>;
   }): void {
     const host = this.panelEl;
@@ -1404,10 +1476,12 @@ export class PanelController {
 
     const confirm = document.createElement("button");
     confirm.type = "button";
-    confirm.className =
-      "palette-editor__action-btn panel__modal-btn--accent panel__save-palette-confirm-btn";
+    confirm.className = options.danger
+      ? "palette-editor__action-btn palette-editor__action-btn--danger"
+      : "palette-editor__action-btn panel__modal-btn--accent panel__save-palette-confirm-btn";
     confirm.textContent = options.confirmLabel;
     confirm.addEventListener("click", () => {
+      this.removeSavePaletteConfirmOverlay();
       void options.onConfirm();
     });
 
@@ -1467,12 +1541,10 @@ export class PanelController {
         button.setAttribute("aria-checked", selected ? "true" : "false");
       });
 
-    this.ref<HTMLElement>("format-switcher")
-      ?.querySelectorAll<HTMLButtonElement>("[data-format]")
-      .forEach((button) => {
-        const selected = button.dataset.format === this.settings.colorFormat;
-        button.setAttribute("aria-checked", selected ? "true" : "false");
-      });
+    const formatSelect = this.ref<HTMLSelectElement>("format-select");
+    if (formatSelect) {
+      formatSelect.value = this.settings.colorFormat;
+    }
   }
 
   private renderRecentColors(animateFirst = false): void {
@@ -1487,6 +1559,12 @@ export class PanelController {
     const isEmpty = this.settings.recentColors.length === 0;
     empty.hidden = !isEmpty;
     empty.classList.toggle("is-hidden", !isEmpty);
+    empty.toggleAttribute("disabled", !isEmpty);
+
+    const wrap = empty.closest(".panel__swatches-wrap");
+    if (wrap instanceof HTMLElement) {
+      wrap.classList.toggle("is-empty", isEmpty);
+    }
 
     track.replaceChildren(
       ...this.settings.recentColors.map((hex, index) => {
