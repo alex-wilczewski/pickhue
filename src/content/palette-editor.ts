@@ -25,6 +25,7 @@ import {
 } from "./icons";
 import { showActionMenu } from "./palette-menu";
 import type { SwatchTooltipController } from "./swatch-tooltip";
+import { bindSwatchTrack, syncTrackOverflow } from "./swatch-track";
 
 export interface PaletteEditorCallbacks {
   onBack: () => void;
@@ -47,6 +48,7 @@ export class PaletteEditorView {
   private savedName = "";
   private committingTitle = false;
   private nameSavedTimer = 0;
+  private recentsScrollLeft = 0;
   private readonly container: HTMLElement;
 
   constructor(
@@ -63,6 +65,9 @@ export class PaletteEditorView {
     colorFormat: ColorFormat,
     options?: PaletteEditorOpenOptions
   ): Promise<void> {
+    if (palette.id !== this.palette?.id) {
+      this.recentsScrollLeft = 0;
+    }
     this.palette = { ...palette, colors: [...palette.colors] };
     this.recentColors = recentColors;
     this.colorFormat = colorFormat;
@@ -339,6 +344,7 @@ export class PaletteEditorView {
       addSection,
       actions
     );
+    this.restoreRecentsScroll();
     requestAnimationFrame(() => this.callbacks.onLayoutChange());
   }
 
@@ -382,22 +388,33 @@ export class PaletteEditorView {
     wrap.append(empty, scroller);
     section.append(label, wrap);
 
-    const syncOverflow = (): void => {
-      const maxScroll = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
-      const hasOverflow = maxScroll > 1;
-      wrap.classList.toggle(
-        "has-more-left",
-        hasOverflow && scroller.scrollLeft > 1
-      );
-      wrap.classList.toggle(
-        "has-more-right",
-        hasOverflow && scroller.scrollLeft < maxScroll - 1
-      );
-    };
-    scroller.addEventListener("scroll", syncOverflow, { passive: true });
-    requestAnimationFrame(syncOverflow);
+    bindSwatchTrack(scroller, {
+      onScroll: () => this.callbacks.getSwatchTooltip()?.hide(),
+      onSettle: (scrollLeft) => {
+        this.recentsScrollLeft = scrollLeft;
+      },
+    });
 
     return section;
+  }
+
+  /**
+   * Toggling a color re-renders the editor, which would otherwise drop the
+   * recents strip back to offset 0 and re-apply the edge fades a frame later —
+   * read as the gradient blinking out and back. Restore synchronously, before
+   * the browser paints the new strip.
+   */
+  private restoreRecentsScroll(): void {
+    const scroller = this.container.querySelector<HTMLElement>(
+      ".palette-editor__recents-track .panel__swatches"
+    );
+    if (!scroller) {
+      return;
+    }
+    const maxScroll = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+    scroller.scrollLeft = Math.min(this.recentsScrollLeft, maxScroll);
+    this.recentsScrollLeft = scroller.scrollLeft;
+    syncTrackOverflow(scroller);
   }
 
   private createRecentItem(hex: string, added: boolean): HTMLElement {

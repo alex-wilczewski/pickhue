@@ -3,6 +3,7 @@ import { DELETE_BUTTON_HTML, DELETE_ICON_HTML, EXPORT_ICON_HTML, IMPORT_ICON_HTM
 import { PaletteEditorView } from "./palette-editor";
 import { dismissActiveMenu, showActionMenu, showSelectMenu } from "./palette-menu";
 import { SwatchTooltipController } from "./swatch-tooltip";
+import { bindSwatchTrack, syncTrackOverflow } from "./swatch-track";
 import { copyText } from "../shared/clipboard";
 import { formatColor } from "../shared/colors";
 import {
@@ -1072,138 +1073,16 @@ export class PanelController {
     if (!scroller) {
       return;
     }
-
-    if (scroller.dataset.scrollFadeBound !== "true") {
-      scroller.dataset.scrollFadeBound = "true";
-      scroller.addEventListener(
-        "scroll",
-        () => {
-          this.swatchTooltip?.hide();
-          this.syncRecentColorsOverflow();
-        },
-        { passive: true }
-      );
-    }
-
-    if (scroller.dataset.scrollWheelBound === "true") {
-      return;
-    }
-    scroller.dataset.scrollWheelBound = "true";
-
-    const PAD = 4;
-    const SWATCH = 36;
-    const GAP = 4;
-    const STRIDE = SWATCH + GAP;
-    const SNAP_IDLE_MS = 120;
-
-    let targetScroll = 0;
-    let scrollRafId = 0;
-    let settleTimer = 0;
-    let direction = 1;
-    let lastLeft = Number.NaN;
-
-    const maxScroll = (): number =>
-      Math.max(0, scroller.scrollWidth - scroller.clientWidth);
-
-    /** Soft snap targets that preserve the 4px edge inset (no CSS mandatory snap). */
-    const nearestSnap = (scrollLeft: number, dir: number): number => {
-      const max = maxScroll();
-      if (max <= 0) {
-        return 0;
-      }
-
-      if (dir >= 0) {
-        // Forward: align item end to the right inset (matches prior snap-end).
-        const index = Math.round(
-          (scrollLeft - SWATCH - 2 * PAD + scroller.clientWidth) / STRIDE
-        );
-        return Math.min(
-          max,
-          Math.max(0, index * STRIDE + SWATCH + 2 * PAD - scroller.clientWidth)
-        );
-      }
-
-      // Backward: align item start to the left inset.
-      const index = Math.round(scrollLeft / STRIDE);
-      return Math.min(max, Math.max(0, index * STRIDE));
-    };
-
-    const animateScroll = (): void => {
-      const diff = targetScroll - scroller.scrollLeft;
-      const stuck = scroller.scrollLeft === lastLeft;
-      lastLeft = scroller.scrollLeft;
-
-      if (Math.abs(diff) <= 0.5 || (stuck && Math.abs(diff) <= 4)) {
-        scroller.scrollLeft = targetScroll;
-        scrollRafId = 0;
-        this.syncRecentColorsOverflow();
-        return;
-      }
-
-      scroller.scrollLeft += diff * 0.16;
-      this.syncRecentColorsOverflow();
-      scrollRafId = requestAnimationFrame(animateScroll);
-    };
-
-    const runToward = (next: number): void => {
-      targetScroll = Math.min(maxScroll(), Math.max(0, next));
-      lastLeft = Number.NaN;
-      if (scrollRafId === 0) {
-        scrollRafId = requestAnimationFrame(animateScroll);
-      }
-    };
-
-    const scheduleSoftSnap = (): void => {
-      window.clearTimeout(settleTimer);
-      settleTimer = window.setTimeout(() => {
-        const basis =
-          scrollRafId !== 0 ? targetScroll : scroller.scrollLeft;
-        const snapped = nearestSnap(basis, direction);
-        if (Math.abs(snapped - basis) > 0.5) {
-          runToward(snapped);
-        }
-      }, SNAP_IDLE_MS);
-    };
-
-    scroller.addEventListener(
-      "wheel",
-      (event) => {
-        const rawDelta = event.deltaY !== 0 ? event.deltaY : event.deltaX;
-        if (rawDelta === 0 || maxScroll() === 0) {
-          return;
-        }
-        event.preventDefault();
-
-        // Soften trackpad/wheel steps; keep free-scroll until the gesture idles.
-        const delta = rawDelta * 0.72;
-        direction = delta > 0 ? 1 : -1;
-        scroller.classList.remove("is-snapping", "snap-end");
-        window.clearTimeout(settleTimer);
-
-        if (scrollRafId === 0) {
-          targetScroll = scroller.scrollLeft;
-        }
-        runToward(targetScroll + delta);
-        scheduleSoftSnap();
-      },
-      { passive: false }
-    );
+    bindSwatchTrack(scroller, {
+      onScroll: () => this.swatchTooltip?.hide(),
+    });
   }
 
   private syncRecentColorsOverflow(): void {
     const scroller = this.ref<HTMLElement>("scroller");
-    const wrap = scroller?.closest(".panel__swatches-wrap");
-    if (!scroller || !(wrap instanceof HTMLElement)) {
-      return;
+    if (scroller) {
+      syncTrackOverflow(scroller);
     }
-
-    const maxScroll = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
-    const hasOverflow = maxScroll > 1;
-    const atStart = scroller.scrollLeft <= 1;
-    const atEnd = scroller.scrollLeft >= maxScroll - 1;
-
-    wrap.classList.toggle("has-more-left", hasOverflow && !atStart);
-    wrap.classList.toggle("has-more-right", hasOverflow && !atEnd);
   }
 
   private bindSettingsControls(): void {
