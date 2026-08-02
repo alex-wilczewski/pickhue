@@ -18,12 +18,14 @@ import {
   updatePalette,
 } from "../shared/storage";
 import type { ColorFormat, ColorPalette } from "../shared/types";
-import { DELETE_BUTTON_HTML, REMOVE_SWATCH_ICON_HTML } from "./icons";
-import { showActionMenu } from "./palette-menu";
 import {
-  SWATCH_TOOLTIP_DELAY_MS,
-  type SwatchTooltipController,
-} from "./swatch-tooltip";
+  CHECK_SWATCH_ICON_HTML,
+  DELETE_BUTTON_HTML,
+  REMOVE_SWATCH_ICON_HTML,
+} from "./icons";
+import { showActionMenu } from "./palette-menu";
+import type { SwatchTooltipController } from "./swatch-tooltip";
+import { bindSwatchTrack, syncTrackOverflow } from "./swatch-track";
 
 export interface PaletteEditorCallbacks {
   onBack: () => void;
@@ -46,6 +48,7 @@ export class PaletteEditorView {
   private savedName = "";
   private committingTitle = false;
   private nameSavedTimer = 0;
+  private recentsScrollLeft = 0;
   private readonly container: HTMLElement;
 
   constructor(
@@ -62,6 +65,9 @@ export class PaletteEditorView {
     colorFormat: ColorFormat,
     options?: PaletteEditorOpenOptions
   ): Promise<void> {
+    if (palette.id !== this.palette?.id) {
+      this.recentsScrollLeft = 0;
+    }
     this.palette = { ...palette, colors: [...palette.colors] };
     this.recentColors = recentColors;
     this.colorFormat = colorFormat;
@@ -283,15 +289,6 @@ export class PaletteEditorView {
     const addSection = document.createElement("div");
     addSection.className = "palette-editor__add";
 
-    const recentsBtn = document.createElement("button");
-    recentsBtn.type = "button";
-    recentsBtn.className = "palette-editor__add-btn palette-editor__add-btn--recents";
-    recentsBtn.textContent = "From Recents";
-    recentsBtn.disabled = this.recentColors.length === 0;
-    recentsBtn.addEventListener("click", () => {
-      this.showRecentsPicker();
-    });
-
     const pasteRow = document.createElement("div");
     pasteRow.className = "palette-editor__paste";
     const pasteInput = document.createElement("input");
@@ -319,7 +316,7 @@ export class PaletteEditorView {
     });
     pasteRow.append(pasteInput, pasteBtn);
 
-    addSection.append(recentsBtn, pasteRow);
+    addSection.append(pasteRow);
 
     const actions = document.createElement("div");
     actions.className = "palette-editor__actions";
@@ -340,8 +337,129 @@ export class PaletteEditorView {
     });
     actions.append(exportBtn, deleteBtn);
 
-    this.container.append(header, swatchSection, addSection, actions);
+    this.container.append(
+      header,
+      swatchSection,
+      this.createRecentsStrip(),
+      addSection,
+      actions
+    );
+    this.restoreRecentsScroll();
     requestAnimationFrame(() => this.callbacks.onLayoutChange());
+  }
+
+  /**
+   * Inline recents track — same 44px scroller the home view uses, so a color
+   * goes into the palette in one click instead of a modal round trip.
+   */
+  private createRecentsStrip(): HTMLElement {
+    const section = document.createElement("div");
+    section.className = "palette-editor__recents";
+
+    const label = document.createElement("h3");
+    label.className = "palette-editor__recents-label";
+    label.textContent = "Recents";
+
+    const wrap = document.createElement("div");
+    wrap.className = "panel__swatches-wrap palette-editor__recents-track";
+
+    const empty = document.createElement("p");
+    empty.className = "panel__swatches-empty palette-editor__recents-empty";
+    empty.textContent = "Colors you pick will show up here.";
+
+    const scroller = document.createElement("div");
+    scroller.className = "panel__swatches";
+    scroller.setAttribute("role", "list");
+
+    const inner = document.createElement("div");
+    inner.className = "panel__swatches-inner";
+
+    const isEmpty = this.recentColors.length === 0;
+    empty.hidden = !isEmpty;
+    wrap.classList.toggle("is-empty", isEmpty);
+
+    const inPalette = new Set(this.palette?.colors ?? []);
+
+    for (const hex of this.recentColors) {
+      inner.append(this.createRecentItem(hex, inPalette.has(hex)));
+    }
+
+    scroller.append(inner);
+    wrap.append(empty, scroller);
+    section.append(label, wrap);
+
+    bindSwatchTrack(scroller, {
+      onScroll: () => this.callbacks.getSwatchTooltip()?.hide(),
+      onSettle: (scrollLeft) => {
+        this.recentsScrollLeft = scrollLeft;
+      },
+    });
+
+    return section;
+  }
+
+  /**
+   * Toggling a color re-renders the editor, which would otherwise drop the
+   * recents strip back to offset 0 and re-apply the edge fades a frame later —
+   * read as the gradient blinking out and back. Restore synchronously, before
+   * the browser paints the new strip.
+   */
+  private restoreRecentsScroll(): void {
+    const scroller = this.container.querySelector<HTMLElement>(
+      ".palette-editor__recents-track .panel__swatches"
+    );
+    if (!scroller) {
+      return;
+    }
+    const maxScroll = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+    scroller.scrollLeft = Math.min(this.recentsScrollLeft, maxScroll);
+    this.recentsScrollLeft = scroller.scrollLeft;
+    syncTrackOverflow(scroller);
+  }
+
+  private createRecentItem(hex: string, added: boolean): HTMLElement {
+    const item = document.createElement("div");
+    item.className = "swatch-item palette-editor__recents-item";
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "swatch palette-editor__recents-swatch";
+    button.style.backgroundColor = hex;
+    button.classList.toggle("is-added", added);
+    button.setAttribute("role", "listitem");
+    button.setAttribute("aria-pressed", added ? "true" : "false");
+
+    const label = formatColor(hex, this.colorFormat);
+    button.setAttribute(
+      "aria-label",
+      added ? `Remove ${label} from palette` : `Add ${label} to palette`
+    );
+    button.addEventListener("click", () => {
+      void this.toggleRecent(hex);
+    });
+
+    const check = document.createElement("span");
+    check.className = "palette-editor__recents-check";
+    check.innerHTML = CHECK_SWATCH_ICON_HTML;
+    check.setAttribute("aria-hidden", "true");
+
+    item.append(button, check);
+    this.callbacks.getSwatchTooltip()?.attach(item, () =>
+      formatColor(hex, this.colorFormat)
+    );
+    return item;
+  }
+
+  private async toggleRecent(hex: string): Promise<void> {
+    if (!this.palette) {
+      return;
+    }
+    this.callbacks.getSwatchTooltip()?.hide();
+    if (this.palette.colors.includes(hex)) {
+      await this.removeColor(hex);
+      return;
+    }
+    await this.addFromRecents([hex]);
   }
 
   private createSwatchItem(hex: string): HTMLElement {
@@ -573,151 +691,6 @@ export class PaletteEditorView {
     overlay.append(dialog);
     this.container.append(overlay);
     cancel.focus();
-  }
-
-  private showRecentsPicker(): void {
-    if (!this.palette) {
-      return;
-    }
-
-    const overlay = document.createElement("div");
-    overlay.className = "palette-editor__recents-overlay";
-
-    const dialog = document.createElement("div");
-    dialog.className = "palette-editor__recents-dialog";
-    dialog.setAttribute("role", "dialog");
-    dialog.setAttribute("aria-label", "From Recents");
-
-    const title = document.createElement("p");
-    title.className = "palette-editor__recents-title";
-    title.textContent = "From Recents";
-
-    const swatchBox = document.createElement("div");
-    swatchBox.className = "palette-editor__swatches palette-editor__recents-swatches";
-
-    const grid = document.createElement("div");
-    grid.className = "palette-editor__swatches-grid";
-
-    const tooltip = document.createElement("div");
-    tooltip.className = "swatch-tooltip palette-editor__recents-tooltip";
-    tooltip.hidden = true;
-    tooltip.setAttribute("role", "tooltip");
-
-    const selected = new Set<string>();
-    let tipTimer = 0;
-    let tipAnchor: HTMLElement | null = null;
-
-    const hideTip = (): void => {
-      window.clearTimeout(tipTimer);
-      tipTimer = 0;
-      tipAnchor = null;
-      tooltip.hidden = true;
-      tooltip.textContent = "";
-    };
-
-    const positionTooltip = (anchor: HTMLElement): void => {
-      const dialogRect = dialog.getBoundingClientRect();
-      const anchorRect = anchor.getBoundingClientRect();
-      const tipWidth = tooltip.offsetWidth;
-      const tipHeight = tooltip.offsetHeight;
-      const left =
-        anchorRect.left -
-        dialogRect.left +
-        anchorRect.width / 2 -
-        tipWidth / 2;
-      let top = anchorRect.bottom - dialogRect.top + 6;
-      const maxTop = Math.max(4, dialog.clientHeight - tipHeight - 4);
-      if (top > maxTop) {
-        top = anchorRect.top - dialogRect.top - tipHeight - 6;
-      }
-      tooltip.style.left = `${Math.max(4, Math.min(left, dialog.clientWidth - tipWidth - 4))}px`;
-      tooltip.style.top = `${Math.max(4, Math.min(top, maxTop))}px`;
-    };
-
-    const scheduleTip = (anchor: HTMLElement, hex: string): void => {
-      window.clearTimeout(tipTimer);
-      tipTimer = window.setTimeout(() => {
-        tipAnchor = anchor;
-        tooltip.textContent = formatColor(hex, this.colorFormat);
-        tooltip.hidden = false;
-        positionTooltip(anchor);
-      }, SWATCH_TOOLTIP_DELAY_MS);
-    };
-
-    const confirm = document.createElement("button");
-    confirm.type = "button";
-    confirm.className = "palette-editor__recents-confirm";
-    confirm.textContent = "Add";
-    confirm.disabled = true;
-
-    const syncConfirm = (): void => {
-      confirm.disabled = selected.size === 0;
-    };
-
-    for (const hex of this.recentColors) {
-      const item = document.createElement("div");
-      item.className = "palette-editor__swatch-item";
-
-      const pick = document.createElement("button");
-      pick.type = "button";
-      pick.className = "swatch palette-editor__recents-pick";
-      pick.style.backgroundColor = hex;
-      pick.setAttribute("aria-label", `Select ${formatColor(hex, this.colorFormat)}`);
-      pick.setAttribute("aria-pressed", "false");
-
-      pick.addEventListener("click", () => {
-        if (selected.has(hex)) {
-          selected.delete(hex);
-          pick.classList.remove("is-selected");
-          pick.setAttribute("aria-pressed", "false");
-        } else {
-          selected.add(hex);
-          pick.classList.add("is-selected");
-          pick.setAttribute("aria-pressed", "true");
-        }
-        syncConfirm();
-      });
-
-      pick.addEventListener("mouseenter", () => {
-        scheduleTip(pick, hex);
-      });
-
-      pick.addEventListener("mousemove", () => {
-        if (tipAnchor === pick && !tooltip.hidden) {
-          positionTooltip(pick);
-        }
-      });
-
-      pick.addEventListener("mouseleave", () => {
-        hideTip();
-      });
-
-      item.append(pick);
-      grid.append(item);
-    }
-
-    swatchBox.append(grid);
-
-    const buttons = document.createElement("div");
-    buttons.className = "palette-editor__recents-actions";
-    const cancel = document.createElement("button");
-    cancel.type = "button";
-    cancel.className = "palette-editor__action-btn";
-    cancel.textContent = "Cancel";
-    cancel.addEventListener("click", () => {
-      hideTip();
-      overlay.remove();
-    });
-    confirm.addEventListener("click", () => {
-      hideTip();
-      void this.addFromRecents([...selected]);
-      overlay.remove();
-    });
-    buttons.append(cancel, confirm);
-
-    dialog.append(title, swatchBox, tooltip, buttons);
-    overlay.append(dialog);
-    this.container.append(overlay);
   }
 
   private async addFromRecents(hexes: string[]): Promise<void> {

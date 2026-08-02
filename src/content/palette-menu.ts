@@ -14,10 +14,12 @@ const TOAST_MENU_GAP = 4;
 /** Active menu dismisser — replace/remove always runs this so listeners don't leak. */
 let activeMenuDismiss: (() => void) | null = null;
 
-function dismissActiveMenu(): void {
+/** Closes whatever menu is open. Returns true when there was one. */
+export function dismissActiveMenu(): boolean {
   const dismiss = activeMenuDismiss;
   activeMenuDismiss = null;
   dismiss?.();
+  return Boolean(dismiss);
 }
 
 function registerMenuDismiss(dismiss: () => void): () => void {
@@ -305,6 +307,171 @@ export function showPaletteMenu(
 
   const onOutside = (event: MouseEvent): void => {
     if (!menu.contains(event.target as Node)) {
+      dismiss();
+    }
+  };
+
+  const onEscape = (event: KeyboardEvent): void => {
+    if (event.key === "Escape") {
+      event.stopPropagation();
+      dismiss();
+    }
+  };
+
+  requestAnimationFrame(() => {
+    document.addEventListener("click", onOutside, true);
+    document.addEventListener("keydown", onEscape, true);
+  });
+
+  return dismiss;
+}
+
+/** Deepest focused node — `document.activeElement` stops at the shadow host. */
+function getDeepActiveElement(): Element | null {
+  let active = document.activeElement;
+  while (active?.shadowRoot?.activeElement) {
+    active = active.shadowRoot.activeElement;
+  }
+  return active;
+}
+
+export interface SelectMenuOption<T extends string> {
+  value: T;
+  label: string;
+}
+
+export interface SelectMenuConfig<T extends string> {
+  /** Accessible name for the listbox. */
+  label: string;
+  options: SelectMenuOption<T>[];
+  selected: T;
+  onSelect: (value: T) => void;
+  /** Extra class on the menu surface, for width/alignment overrides. */
+  className?: string;
+  /** Runs on every dismissal, however it was triggered. */
+  onClose?: () => void;
+}
+
+/**
+ * Single-choice listbox anchored to a button — the keyboard-navigable stand-in
+ * for a native `<select>`, whose popup we cannot style inside the panel.
+ */
+export function showSelectMenu<T extends string>(
+  anchor: HTMLElement,
+  config: SelectMenuConfig<T>
+): () => void {
+  dismissActiveMenu();
+
+  const menu = document.createElement("div");
+  menu.className = config.className
+    ? `${MENU_CLASS} ${config.className}`
+    : MENU_CLASS;
+  menu.setAttribute("role", "listbox");
+  menu.setAttribute("aria-label", config.label);
+
+  anchor.setAttribute("aria-expanded", "true");
+
+  const items: HTMLButtonElement[] = [];
+  let selectedIndex = 0;
+
+  config.options.forEach((option, index) => {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "palette-menu__item";
+    item.setAttribute("role", "option");
+
+    const isSelected = option.value === config.selected;
+    item.setAttribute("aria-selected", isSelected ? "true" : "false");
+    item.classList.toggle("is-selected", isSelected);
+    if (isSelected) {
+      selectedIndex = index;
+    }
+
+    item.textContent = option.label;
+    item.addEventListener("click", (event) => {
+      event.stopPropagation();
+      dismiss();
+      config.onSelect(option.value);
+    });
+    menu.append(item);
+    items.push(item);
+  });
+
+  const focusItem = (index: number): void => {
+    const next = items[((index % items.length) + items.length) % items.length];
+    next?.focus();
+  };
+
+  const currentIndex = (): number => {
+    const active = getDeepActiveElement();
+    const index = items.findIndex((item) => item === active);
+    return index === -1 ? selectedIndex : index;
+  };
+
+  menu.addEventListener("keydown", (event) => {
+    switch (event.key) {
+      case "ArrowDown":
+        event.preventDefault();
+        focusItem(currentIndex() + 1);
+        break;
+      case "ArrowUp":
+        event.preventDefault();
+        focusItem(currentIndex() - 1);
+        break;
+      case "Home":
+        event.preventDefault();
+        focusItem(0);
+        break;
+      case "End":
+        event.preventDefault();
+        focusItem(items.length - 1);
+        break;
+      case "Tab":
+        // Never strand focus in a popup the user is tabbing away from.
+        event.preventDefault();
+        dismiss();
+        break;
+      default:
+        break;
+    }
+  });
+
+  const panel = anchor.closest(".panel");
+  if (panel) {
+    panel.append(menu);
+    const anchorRect = anchor.getBoundingClientRect();
+    const panelRect = panel.getBoundingClientRect();
+    requestAnimationFrame(() => {
+      positionMenuInPanel(menu, anchorRect, panelRect, { alignRight: true });
+      focusItem(selectedIndex);
+    });
+  } else {
+    document.body.append(menu);
+    menu.style.position = "fixed";
+    menu.style.zIndex = "2147483647";
+    requestAnimationFrame(() => {
+      positionMenuFixed(menu, anchor.getBoundingClientRect());
+      focusItem(selectedIndex);
+    });
+  }
+
+  const dismiss = registerMenuDismiss((): void => {
+    const restoreFocus = menu.contains(getDeepActiveElement());
+    menu.remove();
+    anchor.setAttribute("aria-expanded", "false");
+    document.removeEventListener("click", onOutside, true);
+    document.removeEventListener("keydown", onEscape, true);
+    if (restoreFocus) {
+      (anchor as HTMLElement).focus();
+    }
+    config.onClose?.();
+  });
+
+  const onOutside = (event: MouseEvent): void => {
+    // composedPath sees through the shadow root; event.target is retargeted
+    // to the host, so a click inside the menu would otherwise read as outside.
+    const path = event.composedPath();
+    if (!path.includes(menu) && !path.includes(anchor)) {
       dismiss();
     }
   };

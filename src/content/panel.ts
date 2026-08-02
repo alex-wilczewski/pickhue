@@ -1,8 +1,9 @@
 import panelCss from "./panel.css?inline";
-import { DELETE_BUTTON_HTML, DELETE_ICON_HTML, EXPORT_ICON_HTML, MOVE_ICON_HTML, REMOVE_SWATCH_ICON_HTML, RENAME_ICON_HTML, SETTINGS_ICON_HTML } from "./icons";
+import { DELETE_BUTTON_HTML, DELETE_ICON_HTML, EXPORT_ICON_HTML, IMPORT_ICON_HTML, MOVE_ICON_HTML, REMOVE_SWATCH_ICON_HTML, RENAME_ICON_HTML, SETTINGS_ICON_HTML } from "./icons";
 import { PaletteEditorView } from "./palette-editor";
-import { showActionMenu } from "./palette-menu";
+import { dismissActiveMenu, showActionMenu, showSelectMenu } from "./palette-menu";
 import { SwatchTooltipController } from "./swatch-tooltip";
+import { bindSwatchTrack, syncTrackOverflow } from "./swatch-track";
 import { copyText } from "../shared/clipboard";
 import { formatColor } from "../shared/colors";
 import {
@@ -31,6 +32,17 @@ const HOST_ID = "pickhue-panel-host";
 const PANEL_STYLES_ID = "pickhue-panel-styles";
 const CLOSE_ANIM_MS = 180;
 const PALETTE_PREVIEW_COUNT = 4;
+
+const FORMAT_OPTIONS: { value: ColorFormat; label: string }[] = [
+  { value: "hex", label: "HEX" },
+  { value: "rgb", label: "RGB" },
+  { value: "hsl", label: "HSL" },
+  { value: "oklch", label: "OKLCH" },
+];
+
+function formatLabel(format: ColorFormat): string {
+  return FORMAT_OPTIONS.find((option) => option.value === format)?.label ?? "HEX";
+}
 
 /** True when wheel should scroll an element inside the panel, not be blocked. */
 function isInternallyScrollable(
@@ -97,7 +109,14 @@ const TEMPLATE = `
             </button>
           </div>
           <div class="panel__swatches-wrap">
-            <p class="panel__swatches-empty" data-ref="empty">Colors you select go here.</p>
+            <button
+              type="button"
+              class="panel__swatches-empty"
+              data-ref="empty"
+              aria-label="Select Color"
+            >
+              Colors you select go here.
+            </button>
             <div class="panel__swatches" role="list" data-ref="scroller">
               <div class="panel__swatches-inner" data-ref="track"></div>
             </div>
@@ -143,20 +162,22 @@ const TEMPLATE = `
           </div>
 
           <div class="panel__setting">
-            <span class="panel__setting-label">Format</span>
-            <div class="format-switcher" role="radiogroup" aria-label="Format" data-ref="format-switcher">
-              <button type="button" class="format-switcher__btn" data-format="hex" role="radio" aria-checked="true">HEX</button>
-              <button type="button" class="format-switcher__btn" data-format="rgb" role="radio" aria-checked="false">RGB</button>
-              <button type="button" class="format-switcher__btn" data-format="hsl" role="radio" aria-checked="false">HSL</button>
-              <button type="button" class="format-switcher__btn" data-format="oklch" role="radio" aria-checked="false">OKLCH</button>
+            <span class="panel__setting-label">Palettes</span>
+            <div class="panel__setting-actions">
+              <button type="button" class="panel__palette-btn panel__palette-btn--icon" aria-label="Export All" data-ref="export-palettes">${EXPORT_ICON_HTML}</button>
+              <button type="button" class="panel__palette-btn panel__palette-btn--icon" aria-label="Import" data-ref="import-palettes">${IMPORT_ICON_HTML}</button>
             </div>
           </div>
 
           <div class="panel__setting">
-            <span class="panel__setting-label">Palettes</span>
-            <div class="panel__setting-actions">
-              <button type="button" class="panel__palette-btn" data-ref="export-palettes">Export All</button>
-              <button type="button" class="panel__palette-btn" data-ref="import-palettes">Import</button>
+            <span class="panel__setting-label">Format</span>
+            <div class="format-select">
+              <button type="button" class="format-select__control" aria-label="Color format" aria-haspopup="listbox" aria-expanded="false" data-ref="format-select">
+                <span class="format-select__value" data-ref="format-select-value">HEX</span>
+                <svg class="format-select__chevron" viewBox="0 0 24 24" width="12" height="12" aria-hidden="true">
+                  <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                </svg>
+              </button>
             </div>
           </div>
         </section>
@@ -219,6 +240,7 @@ export class PanelController {
   private host: HTMLDivElement | null = null;
   private shadow: ShadowRoot | null = null;
   private panelEl: HTMLElement | null = null;
+  private formatMenuDismiss: (() => void) | null = null;
   private closeTimer = 0;
   private toastTimer = 0;
   private settings: Settings = {
@@ -285,6 +307,13 @@ export class PanelController {
   };
   private readonly onEscapeKey = (event: KeyboardEvent): void => {
     if (event.key !== "Escape" || !this.isOpen) {
+      return;
+    }
+    // A menu is always the topmost layer — peel it before anything else, so
+    // Escape never closes the whole panel out from under an open dropdown.
+    if (dismissActiveMenu()) {
+      event.preventDefault();
+      event.stopPropagation();
       return;
     }
     if (this.ref<HTMLElement>("import-dialog")?.hidden === false) {
@@ -648,11 +677,14 @@ export class PanelController {
     this.bindEvents();
   }
 
-  private ensureSwatchTooltip(): void {
-    if (this.swatchTooltip || !this.panelEl) {
-      return;
+  private ensureSwatchTooltip(): SwatchTooltipController | null {
+    if (!this.panelEl) {
+      return null;
     }
-    this.swatchTooltip = new SwatchTooltipController(this.panelEl);
+    if (!this.swatchTooltip) {
+      this.swatchTooltip = new SwatchTooltipController(this.panelEl);
+    }
+    return this.swatchTooltip;
   }
 
   private disposeSwatchTooltip(): void {
@@ -753,6 +785,13 @@ export class PanelController {
         this.setSelectionMode(!this.selectionMode);
       }
     );
+
+    this.ref<HTMLButtonElement>("empty")?.addEventListener("click", () => {
+      if (this.selectionMode || this.view !== "home") {
+        return;
+      }
+      this.options.onStartPicker();
+    });
 
     this.ref<HTMLButtonElement>("export-palettes")?.addEventListener(
       "click",
@@ -1034,138 +1073,16 @@ export class PanelController {
     if (!scroller) {
       return;
     }
-
-    if (scroller.dataset.scrollFadeBound !== "true") {
-      scroller.dataset.scrollFadeBound = "true";
-      scroller.addEventListener(
-        "scroll",
-        () => {
-          this.swatchTooltip?.hide();
-          this.syncRecentColorsOverflow();
-        },
-        { passive: true }
-      );
-    }
-
-    if (scroller.dataset.scrollWheelBound === "true") {
-      return;
-    }
-    scroller.dataset.scrollWheelBound = "true";
-
-    const PAD = 4;
-    const SWATCH = 36;
-    const GAP = 4;
-    const STRIDE = SWATCH + GAP;
-    const SNAP_IDLE_MS = 120;
-
-    let targetScroll = 0;
-    let scrollRafId = 0;
-    let settleTimer = 0;
-    let direction = 1;
-    let lastLeft = Number.NaN;
-
-    const maxScroll = (): number =>
-      Math.max(0, scroller.scrollWidth - scroller.clientWidth);
-
-    /** Soft snap targets that preserve the 4px edge inset (no CSS mandatory snap). */
-    const nearestSnap = (scrollLeft: number, dir: number): number => {
-      const max = maxScroll();
-      if (max <= 0) {
-        return 0;
-      }
-
-      if (dir >= 0) {
-        // Forward: align item end to the right inset (matches prior snap-end).
-        const index = Math.round(
-          (scrollLeft - SWATCH - 2 * PAD + scroller.clientWidth) / STRIDE
-        );
-        return Math.min(
-          max,
-          Math.max(0, index * STRIDE + SWATCH + 2 * PAD - scroller.clientWidth)
-        );
-      }
-
-      // Backward: align item start to the left inset.
-      const index = Math.round(scrollLeft / STRIDE);
-      return Math.min(max, Math.max(0, index * STRIDE));
-    };
-
-    const animateScroll = (): void => {
-      const diff = targetScroll - scroller.scrollLeft;
-      const stuck = scroller.scrollLeft === lastLeft;
-      lastLeft = scroller.scrollLeft;
-
-      if (Math.abs(diff) <= 0.5 || (stuck && Math.abs(diff) <= 4)) {
-        scroller.scrollLeft = targetScroll;
-        scrollRafId = 0;
-        this.syncRecentColorsOverflow();
-        return;
-      }
-
-      scroller.scrollLeft += diff * 0.16;
-      this.syncRecentColorsOverflow();
-      scrollRafId = requestAnimationFrame(animateScroll);
-    };
-
-    const runToward = (next: number): void => {
-      targetScroll = Math.min(maxScroll(), Math.max(0, next));
-      lastLeft = Number.NaN;
-      if (scrollRafId === 0) {
-        scrollRafId = requestAnimationFrame(animateScroll);
-      }
-    };
-
-    const scheduleSoftSnap = (): void => {
-      window.clearTimeout(settleTimer);
-      settleTimer = window.setTimeout(() => {
-        const basis =
-          scrollRafId !== 0 ? targetScroll : scroller.scrollLeft;
-        const snapped = nearestSnap(basis, direction);
-        if (Math.abs(snapped - basis) > 0.5) {
-          runToward(snapped);
-        }
-      }, SNAP_IDLE_MS);
-    };
-
-    scroller.addEventListener(
-      "wheel",
-      (event) => {
-        const rawDelta = event.deltaY !== 0 ? event.deltaY : event.deltaX;
-        if (rawDelta === 0 || maxScroll() === 0) {
-          return;
-        }
-        event.preventDefault();
-
-        // Soften trackpad/wheel steps; keep free-scroll until the gesture idles.
-        const delta = rawDelta * 0.72;
-        direction = delta > 0 ? 1 : -1;
-        scroller.classList.remove("is-snapping", "snap-end");
-        window.clearTimeout(settleTimer);
-
-        if (scrollRafId === 0) {
-          targetScroll = scroller.scrollLeft;
-        }
-        runToward(targetScroll + delta);
-        scheduleSoftSnap();
-      },
-      { passive: false }
-    );
+    bindSwatchTrack(scroller, {
+      onScroll: () => this.swatchTooltip?.hide(),
+    });
   }
 
   private syncRecentColorsOverflow(): void {
     const scroller = this.ref<HTMLElement>("scroller");
-    const wrap = scroller?.closest(".panel__swatches-wrap");
-    if (!scroller || !(wrap instanceof HTMLElement)) {
-      return;
+    if (scroller) {
+      syncTrackOverflow(scroller);
     }
-
-    const maxScroll = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
-    const hasOverflow = maxScroll > 1;
-    const atStart = scroller.scrollLeft <= 1;
-    const atEnd = scroller.scrollLeft >= maxScroll - 1;
-
-    wrap.classList.toggle("has-more-left", hasOverflow && !atStart);
-    wrap.classList.toggle("has-more-right", hasOverflow && !atEnd);
   }
 
   private bindSettingsControls(): void {
@@ -1177,13 +1094,31 @@ export class PanelController {
         });
       });
 
-    this.ref<HTMLElement>("format-switcher")
-      ?.querySelectorAll<HTMLButtonElement>("[data-format]")
-      .forEach((button) => {
-        button.addEventListener("click", () => {
-          void this.updateColorFormat(button.dataset.format as ColorFormat);
-        });
+    const formatBtn = this.ref<HTMLButtonElement>("format-select");
+    if (formatBtn) {
+      this.ensureSwatchTooltip()?.attach(formatBtn, () => "Color format");
+      formatBtn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        this.showFormatMenu(formatBtn);
       });
+      formatBtn.addEventListener("keydown", (event) => {
+        if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+          event.preventDefault();
+          if (!this.formatMenuDismiss) {
+            this.showFormatMenu(formatBtn);
+          }
+        }
+      });
+    }
+
+    const exportBtn = this.ref<HTMLButtonElement>("export-palettes");
+    if (exportBtn) {
+      this.ensureSwatchTooltip()?.attach(exportBtn, () => "Export All");
+    }
+    const importBtn = this.ref<HTMLButtonElement>("import-palettes");
+    if (importBtn) {
+      this.ensureSwatchTooltip()?.attach(importBtn, () => "Import");
+    }
   }
 
   private startPickerFromEditor(): void {
@@ -1274,13 +1209,13 @@ export class PanelController {
 
   private updateSelectionToggle(): void {
     const toggle = this.ref<HTMLButtonElement>("select-mode-toggle");
-    if (!toggle) {
-      return;
-    }
     const hasRecents = this.settings.recentColors.length > 0;
-    toggle.hidden = !hasRecents;
-    toggle.classList.toggle("is-active", this.selectionMode);
-    toggle.textContent = this.selectionMode ? "Cancel" : "Save to palette";
+
+    if (toggle) {
+      toggle.hidden = !hasRecents;
+      toggle.classList.toggle("is-active", this.selectionMode);
+      toggle.textContent = this.selectionMode ? "Cancel" : "Save to palette";
+    }
   }
 
   private updateFooterCta(): void {
@@ -1367,6 +1302,7 @@ export class PanelController {
     title: string;
     message: string;
     confirmLabel: string;
+    danger?: boolean;
     onConfirm: () => void | Promise<void>;
   }): void {
     const host = this.panelEl;
@@ -1404,10 +1340,12 @@ export class PanelController {
 
     const confirm = document.createElement("button");
     confirm.type = "button";
-    confirm.className =
-      "palette-editor__action-btn panel__modal-btn--accent panel__save-palette-confirm-btn";
+    confirm.className = options.danger
+      ? "palette-editor__action-btn palette-editor__action-btn--danger"
+      : "palette-editor__action-btn panel__modal-btn--accent panel__save-palette-confirm-btn";
     confirm.textContent = options.confirmLabel;
     confirm.addEventListener("click", () => {
+      this.removeSavePaletteConfirmOverlay();
       void options.onConfirm();
     });
 
@@ -1467,12 +1405,10 @@ export class PanelController {
         button.setAttribute("aria-checked", selected ? "true" : "false");
       });
 
-    this.ref<HTMLElement>("format-switcher")
-      ?.querySelectorAll<HTMLButtonElement>("[data-format]")
-      .forEach((button) => {
-        const selected = button.dataset.format === this.settings.colorFormat;
-        button.setAttribute("aria-checked", selected ? "true" : "false");
-      });
+    const formatValue = this.ref<HTMLElement>("format-select-value");
+    if (formatValue) {
+      formatValue.textContent = formatLabel(this.settings.colorFormat);
+    }
   }
 
   private renderRecentColors(animateFirst = false): void {
@@ -1487,6 +1423,12 @@ export class PanelController {
     const isEmpty = this.settings.recentColors.length === 0;
     empty.hidden = !isEmpty;
     empty.classList.toggle("is-hidden", !isEmpty);
+    empty.toggleAttribute("disabled", !isEmpty);
+
+    const wrap = empty.closest(".panel__swatches-wrap");
+    if (wrap instanceof HTMLElement) {
+      wrap.classList.toggle("is-empty", isEmpty);
+    }
 
     track.replaceChildren(
       ...this.settings.recentColors.map((hex, index) => {
@@ -1941,6 +1883,29 @@ export class PanelController {
         error instanceof Error ? error.message : "Import failed"
       );
     }
+  }
+
+  private showFormatMenu(anchor: HTMLButtonElement): void {
+    if (this.formatMenuDismiss) {
+      // A second click on the trigger closes the menu that click opened.
+      this.formatMenuDismiss();
+      return;
+    }
+
+    this.swatchTooltip?.hide();
+
+    this.formatMenuDismiss = showSelectMenu<ColorFormat>(anchor, {
+      label: "Color format",
+      className: "format-select-menu",
+      options: FORMAT_OPTIONS,
+      selected: this.settings.colorFormat,
+      onSelect: (value) => {
+        void this.updateColorFormat(value);
+      },
+      onClose: () => {
+        this.formatMenuDismiss = null;
+      },
+    });
   }
 
   private showExportMenu(anchor: HTMLButtonElement): void {

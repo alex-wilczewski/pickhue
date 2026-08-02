@@ -18,6 +18,9 @@ let toastPointerTimer = 0;
 let toastPaletteMenuOpen = false;
 let toastMenuOpenId = 0;
 const LOUPE_SIZE = 144;
+const LOUPE_INFO_HEIGHT = 32;
+const LOUPE_INFO_GAP = 8;
+const LOUPE_EDGE_PAD = 8;
 const SAMPLE = 11;
 const ZOOM_MIN = 0.4;
 const ZOOM_MAX = 1.75;
@@ -78,6 +81,29 @@ export class EyedropperOverlay {
   private capturePending = false;
   private scrollCapturePending = false;
   private scrollCaptureTimer = 0;
+  private themeListenerAttached = false;
+
+  private readonly onThemeStorageChange = (
+    changes: { [key: string]: chrome.storage.StorageChange },
+    area: string
+  ): void => {
+    if (area !== "sync" || !changes.pickhue_settings) {
+      return;
+    }
+    void getSettings().then((settings) => {
+      const theme = resolveTheme(settings.themeMode);
+      this.uiTheme = theme;
+      this.colorFormat = settings.colorFormat;
+      if (this.root) {
+        this.root.dataset.theme = theme;
+      }
+      const toast = document.getElementById(TOAST_ID);
+      if (toast) {
+        toast.dataset.theme = theme;
+      }
+      this.updateHint();
+    });
+  };
 
   private onKeyDown = (event: KeyboardEvent): void => {
     if (event.key === "Escape") {
@@ -155,6 +181,7 @@ export class EyedropperOverlay {
     this.hasPointer = false;
     this.zoom = ZOOM_DEFAULT;
     this.mount();
+    this.attachThemeListener();
     document.addEventListener("keydown", this.onKeyDown, true);
     document.addEventListener("scroll", this.onScroll, {
       capture: true,
@@ -166,6 +193,14 @@ export class EyedropperOverlay {
     window.visualViewport?.addEventListener("scroll", this.onScroll, {
       passive: true,
     });
+  }
+
+  private attachThemeListener(): void {
+    if (this.themeListenerAttached) {
+      return;
+    }
+    chrome.storage.onChanged.addListener(this.onThemeStorageChange);
+    this.themeListenerAttached = true;
   }
 
   /**
@@ -332,6 +367,7 @@ export class EyedropperOverlay {
     this.hint = null;
     this.hasPointer = false;
     this.zoom = ZOOM_DEFAULT;
+    syncToastAboveHint();
     this.onClose?.({
       reason,
       hex: reason === "pick" ? (this.lastPickedHex ?? undefined) : undefined,
@@ -373,6 +409,8 @@ export class EyedropperOverlay {
     this.hexLabel.textContent = "#------";
 
     info.append(this.swatchDot, this.hexLabel);
+    // Glass stays centered on the cursor; the color chip is absolutely
+    // positioned above (or below near the top edge) so it never clips.
     this.loupe.append(glass, info);
 
     this.hint = document.createElement("p");
@@ -381,6 +419,7 @@ export class EyedropperOverlay {
 
     this.root.append(this.loupe, this.hint);
     document.documentElement.append(this.root);
+    syncToastAboveHint();
 
     // Listen on window (capture) rather than the overlay root: it is immune to
     // any page CSS or specificity quirks that could collapse the root's box.
@@ -414,10 +453,37 @@ export class EyedropperOverlay {
       return;
     }
 
-    // Center the loupe on the pointer so the magnified center pixel is exactly
-    // the pixel that will be picked (the system cursor is hidden via CSS).
-    const tx = Math.round(this.pointerX - LOUPE_SIZE / 2);
-    const ty = Math.round(this.pointerY - LOUPE_SIZE / 2);
+    // Center the loupe glass on the pointer so the magnified center pixel is
+    // exactly the pixel that will be picked (cursor is hidden via CSS).
+    const viewportWidth = window.visualViewport?.width ?? window.innerWidth;
+    const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+    const viewportLeft = window.visualViewport?.offsetLeft ?? 0;
+    const viewportTop = window.visualViewport?.offsetTop ?? 0;
+
+    let tx = Math.round(this.pointerX - LOUPE_SIZE / 2);
+    let ty = Math.round(this.pointerY - LOUPE_SIZE / 2);
+
+    const minX = Math.round(viewportLeft + LOUPE_EDGE_PAD);
+    const maxX = Math.round(
+      viewportLeft + viewportWidth - LOUPE_SIZE - LOUPE_EDGE_PAD
+    );
+    const minY = Math.round(viewportTop + LOUPE_EDGE_PAD);
+    const maxY = Math.round(
+      viewportTop + viewportHeight - LOUPE_SIZE - LOUPE_EDGE_PAD
+    );
+    if (maxX >= minX) {
+      tx = Math.min(maxX, Math.max(minX, tx));
+    }
+    if (maxY >= minY) {
+      ty = Math.min(maxY, Math.max(minY, ty));
+    }
+
+    // Prefer the color chip above the loupe; flip below when near the top.
+    const spaceAbove = ty - viewportTop;
+    const needsBelow =
+      spaceAbove < LOUPE_INFO_HEIGHT + LOUPE_INFO_GAP + LOUPE_EDGE_PAD;
+    this.loupe.classList.toggle("is-info-below", needsBelow);
+
     this.loupe.style.transform = `translate(${tx}px, ${ty}px)`;
     this.loupe.style.opacity = "1";
 
@@ -565,6 +631,18 @@ export function showCopyToast(formatted: string, hex: string): void {
   void showCopyToastAsync(formatted, hex);
 }
 
+function syncOpenToastTheme(theme: "light" | "dark"): void {
+  const toast = document.getElementById(TOAST_ID);
+  if (toast) {
+    toast.dataset.theme = theme;
+  }
+  document
+    .querySelectorAll<HTMLElement>(".palette-menu--toast")
+    .forEach((menu) => {
+      menu.dataset.theme = theme;
+    });
+}
+
 async function showCopyToastAsync(formatted: string, hex: string): Promise<void> {
   let toast = document.getElementById(TOAST_ID) as HTMLDivElement | null;
 
@@ -579,7 +657,9 @@ async function showCopyToastAsync(formatted: string, hex: string): Promise<void>
   clearToastHideTimers();
 
   const settings = await getSettings();
-  toast.dataset.theme = resolveTheme(settings.themeMode);
+  const theme = resolveTheme(settings.themeMode);
+  toast.dataset.theme = theme;
+  syncOpenToastTheme(theme);
 
   toast.innerHTML = `
     <span class="pickhue-copy-toast__swatch" style="background-color:${hex}"></span>
@@ -597,7 +677,19 @@ async function showCopyToastAsync(formatted: string, hex: string): Promise<void>
   });
 
   requestAnimationFrame(() => toast?.classList.add("is-visible"));
-  scheduleToastHide(4000);
+  syncToastAboveHint();
+  scheduleToastHide(3000);
+}
+
+function syncToastAboveHint(): void {
+  const toast = document.getElementById(TOAST_ID);
+  if (!toast) {
+    return;
+  }
+  toast.classList.toggle(
+    "is-above-hint",
+    Boolean(document.getElementById(PICKER_ID))
+  );
 }
 
 function clearToastHideTimers(): void {

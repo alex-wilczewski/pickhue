@@ -2,6 +2,21 @@
 
 All notable changes to PickHue are documented here.
 
+## [2.0.4] — 2026-08-01
+
+Chrome Web Store compliance fix and settings / picker UX polish.
+
+- **Removed unused `tabs` permission** (Chrome Web Store rejection: Purple Potassium). Capture and messaging continue via `activeTab` + host access
+- Format setting is a **dropdown** (HEX / RGB / HSL / OKLCH) instead of a segmented control, with full keyboard support — arrows, Home/End, Enter, Escape
+- Export All and Import are **icon buttons** with tooltips, and settings rows now read Theme → Palettes → Format
+- Palette editor: recent colors are an **inline strip** — one click adds a color, clicking it again removes it, and colors already in the palette are marked with a check. Replaces the "From Recents" modal
+- Palette editor: the color well holds a **fixed height** whether it is empty or filled, so the panel no longer jumps when the first color lands
+- **Escape** closes an open menu before it closes the panel
+- Empty Recent Colors hint acts as **Select Color**
+- Loupe color chip stays **above** the magnifier by default and flips below near the top edge so it remains visible at the bottom of the page
+- Copy toast lifts clear of the loupe hint while the picker is open, and auto-dismisses after 3s instead of 4s
+- Copy toast, confirm/import modals, and loupe chip polish for light and dark themes (live theme sync while overlays are open)
+
 ## [2.0.3] — 2026-07-15
 
 Theme-aware picker UI and Save to palette flow polish.

@@ -1,27 +1,42 @@
-# PickHue — Chrome Web Store submission guide (v2.0.3)
+# PickHue — Chrome Web Store submission guide (v2.0.4)
 
-Use this checklist when uploading **PickHue 2.0.3** to the [Developer Dashboard](https://chrome.google.com/webstore/devconsole).
+Use this checklist when uploading **PickHue 2.0.4** to the [Developer Dashboard](https://chrome.google.com/webstore/devconsole).
 
-> **Status:** v2.0.2 is live on the Web Store. This guide is for the **2.0.3 update**. Listing copy can stay as for 2.0 — no store text rewrite required.
+> **Status:** Previous 2.0.3 draft was rejected for requesting the unnecessary `tabs` permission (Purple Potassium). This build removes it and adds Recent Colors / picker polish.
 
 ## Before you upload
 
 ```bash
 npm install
-npm run package          # builds dist/ and creates pickhue-2.0.3.zip
+npm run package          # builds dist/ and creates pickhue-2.0.4.zip
 npm run typecheck        # optional sanity check
 ```
 
-### Manual QA checklist (v2.0.3)
+### Permission check (required)
+
+Open `dist/manifest.json` and confirm:
+
+- `permissions` is exactly: `storage`, `activeTab`, `scripting`
+- There is **no** `"tabs"` permission
+- `host_permissions` still includes `<all_urls>` (needed for capture / inject)
+
+### Manual QA checklist (v2.0.4)
 
 - [ ] Fresh load of `dist/` on a test profile
-- [ ] Theme: light / dark / system — loupe hint and copy toast match the panel theme
-- [ ] Light-mode toast and hint are slightly translucent (not opaque white)
-- [ ] Save to palette → palettes greyed until a recent swatch is selected; then green pulse appears
-- [ ] Gear icon visible but disabled during save flow (not hidden)
-- [ ] “Add colors” confirm is green; Cancel stays grey
-- [ ] Pick-toast Save to palette menu opens and dismisses correctly
-- [ ] Existing 2.0.2 flows still work
+- [ ] Toolbar click toggles panel on a normal https page
+- [ ] Eyedropper captures and copies a color (activeTab + host access, no `tabs`)
+- [ ] Format setting is a dropdown; changing it updates copied / recent labels
+- [ ] Format dropdown by keyboard: arrows move, Home/End jump, Enter picks, Escape closes the menu but leaves the panel open
+- [ ] Clicking the Format trigger a second time closes the menu
+- [ ] Export All / Import icon buttons show tooltips and run the right action
+- [ ] Palette editor: clicking a recents swatch adds it; clicking it again removes it; added ones show a check
+- [ ] Palette editor: the color well is the same height empty as it is with one color
+- [ ] Palette editor: recents strip scrolls horizontally with fade edges when it overflows
+- [ ] Empty Recent Colors text starts the picker
+- [ ] Loupe color chip stays visible at the bottom of a tall page; flips below near the top
+- [ ] Copy toast clears the loupe hint while the picker is open
+- [ ] Theme: light / dark / system — panel toast, copy toast, confirm modals, loupe chip
+- [ ] Existing Save to palette / import / export flows still work
 
 ## Required URLs
 
@@ -38,19 +53,20 @@ npm run typecheck        # optional sanity check
 If you want store visitors to see update copy, your only options are:
 
 1. **Optional:** Edit the **Store listing** → **Detailed description** and prepend a line such as:
-   > What’s new in 2.0.3: Theme-aware picker overlays, Save to palette flow polish, and UI fixes.
+   > What’s new in 2.0.4: Removed unused tabs permission; keyboard-navigable format dropdown; one-click recents in the palette editor; icon Export/Import buttons; loupe chip stays on-screen.
 2. **After approval:** Mention the update on https://pickhue.site or in GitHub release comments.
 
-You do **not** need to change listing text to ship 2.0.3.
+You do **not** need to change listing text to ship 2.0.4.
 
 ## Submit (update existing listing)
 
-1. Dashboard → your **PickHue** item → **Package** → upload `pickhue-2.0.3.zip`
-2. Confirm the draft package shows version **2.0.3**
+1. Dashboard → your **PickHue** item → **Package** → upload `pickhue-2.0.4.zip`
+2. Confirm the draft package shows version **2.0.4**
 3. Confirm privacy policy URL is current (no listing rewrite required)
-4. **Submit for review**
+4. On the permissions review screen, confirm `tabs` is **not** listed
+5. **Submit for review**
 
 ## After approval
 
-- Confirm Web Store users receive 2.0.3
+- Confirm Web Store users receive 2.0.4
 - Optionally note the update on https://pickhue.site / GitHub release comments
