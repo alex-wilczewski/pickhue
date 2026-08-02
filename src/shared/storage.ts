@@ -154,10 +154,6 @@ export async function removeRecentColor(hex: string): Promise<Settings> {
   });
 }
 
-export async function clearRecentColors(): Promise<Settings> {
-  return saveSettings({ recentColors: [] });
-}
-
 export async function getPalettesStore(): Promise<PalettesStore> {
   const result = await chrome.storage.sync.get(PALETTES_KEY);
   const stored = result[PALETTES_KEY] as PalettesStore | undefined;

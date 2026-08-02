@@ -182,7 +182,12 @@
   pointer-events: none;
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  transition: transform 0.22s ease, opacity 0.22s ease;
+  transition: transform 0.22s ease, opacity 0.22s ease, bottom 0.22s ease;
+}
+
+/* Sit above the loupe instruction pill when the picker is open. */
+.pickhue-copy-toast.is-above-hint {
+  bottom: 84px;
 }
 
 .pickhue-copy-toast[data-theme="light"] {

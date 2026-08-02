@@ -367,6 +367,7 @@ export class EyedropperOverlay {
     this.hint = null;
     this.hasPointer = false;
     this.zoom = ZOOM_DEFAULT;
+    syncToastAboveHint();
     this.onClose?.({
       reason,
       hex: reason === "pick" ? (this.lastPickedHex ?? undefined) : undefined,
@@ -418,6 +419,7 @@ export class EyedropperOverlay {
 
     this.root.append(this.loupe, this.hint);
     document.documentElement.append(this.root);
+    syncToastAboveHint();
 
     // Listen on window (capture) rather than the overlay root: it is immune to
     // any page CSS or specificity quirks that could collapse the root's box.
@@ -675,7 +677,19 @@ async function showCopyToastAsync(formatted: string, hex: string): Promise<void>
   });
 
   requestAnimationFrame(() => toast?.classList.add("is-visible"));
-  scheduleToastHide(4000);
+  syncToastAboveHint();
+  scheduleToastHide(3000);
+}
+
+function syncToastAboveHint(): void {
+  const toast = document.getElementById(TOAST_ID);
+  if (!toast) {
+    return;
+  }
+  toast.classList.toggle(
+    "is-above-hint",
+    Boolean(document.getElementById(PICKER_ID))
+  );
 }
 
 function clearToastHideTimers(): void {

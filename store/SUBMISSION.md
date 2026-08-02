@@ -26,9 +26,12 @@ Open `dist/manifest.json` and confirm:
 - [ ] Toolbar click toggles panel on a normal https page
 - [ ] Eyedropper captures and copies a color (activeTab + host access, no `tabs`)
 - [ ] Format setting is a dropdown; changing it updates copied / recent labels
-- [ ] Clear all removes recent colors after confirm
+- [ ] Format dropdown by keyboard: arrows move, Home/End jump, Enter picks, Escape closes the menu but leaves the panel open
+- [ ] Clicking the Format trigger a second time closes the menu
+- [ ] Export All / Import icon buttons show tooltips and run the right action
 - [ ] Empty Recent Colors text starts the picker
 - [ ] Loupe color chip stays visible at the bottom of a tall page; flips below near the top
+- [ ] Copy toast clears the loupe hint while the picker is open
 - [ ] Theme: light / dark / system — panel toast, copy toast, confirm modals, loupe chip
 - [ ] Existing Save to palette / import / export flows still work
 
@@ -47,7 +50,7 @@ Open `dist/manifest.json` and confirm:
 If you want store visitors to see update copy, your only options are:
 
 1. **Optional:** Edit the **Store listing** → **Detailed description** and prepend a line such as:
-   > What’s new in 2.0.4: Removed unused tabs permission; Clear all recent colors; format dropdown; loupe chip stays on-screen; empty-state Select Color shortcut.
+   > What’s new in 2.0.4: Removed unused tabs permission; keyboard-navigable format dropdown; icon Export/Import buttons; loupe chip stays on-screen; empty-state Select Color shortcut.
 2. **After approval:** Mention the update on https://pickhue.site or in GitHub release comments.
 
 You do **not** need to change listing text to ship 2.0.4.

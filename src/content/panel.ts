@@ -1,7 +1,7 @@
 import panelCss from "./panel.css?inline";
-import { DELETE_BUTTON_HTML, DELETE_ICON_HTML, EXPORT_ICON_HTML, MOVE_ICON_HTML, REMOVE_SWATCH_ICON_HTML, RENAME_ICON_HTML, SETTINGS_ICON_HTML } from "./icons";
+import { DELETE_BUTTON_HTML, DELETE_ICON_HTML, EXPORT_ICON_HTML, IMPORT_ICON_HTML, MOVE_ICON_HTML, REMOVE_SWATCH_ICON_HTML, RENAME_ICON_HTML, SETTINGS_ICON_HTML } from "./icons";
 import { PaletteEditorView } from "./palette-editor";
-import { showActionMenu } from "./palette-menu";
+import { dismissActiveMenu, showActionMenu, showSelectMenu } from "./palette-menu";
 import { SwatchTooltipController } from "./swatch-tooltip";
 import { copyText } from "../shared/clipboard";
 import { formatColor } from "../shared/colors";
@@ -15,7 +15,6 @@ import { exportPalettes, importPalettes, importPalettesFromAse } from "../shared
 import {
   addColorsToPalette,
   addRecentColor,
-  clearRecentColors,
   createPalette,
   deletePalette,
   getPalettes,
@@ -32,6 +31,17 @@ const HOST_ID = "pickhue-panel-host";
 const PANEL_STYLES_ID = "pickhue-panel-styles";
 const CLOSE_ANIM_MS = 180;
 const PALETTE_PREVIEW_COUNT = 4;
+
+const FORMAT_OPTIONS: { value: ColorFormat; label: string }[] = [
+  { value: "hex", label: "HEX" },
+  { value: "rgb", label: "RGB" },
+  { value: "hsl", label: "HSL" },
+  { value: "oklch", label: "OKLCH" },
+];
+
+function formatLabel(format: ColorFormat): string {
+  return FORMAT_OPTIONS.find((option) => option.value === format)?.label ?? "HEX";
+}
 
 /** True when wheel should scroll an element inside the panel, not be blocked. */
 function isInternallyScrollable(
@@ -93,14 +103,9 @@ const TEMPLATE = `
         <section class="panel__section panel__section--recent">
           <div class="panel__section-head">
             <h2 class="panel__label">Recent Colors</h2>
-            <div class="panel__section-actions">
-              <button type="button" class="panel__section-action" data-ref="clear-recents" hidden>
-                Clear all
-              </button>
-              <button type="button" class="panel__section-action" data-ref="select-mode-toggle" hidden>
-                Save to palette
-              </button>
-            </div>
+            <button type="button" class="panel__section-action" data-ref="select-mode-toggle" hidden>
+              Save to palette
+            </button>
           </div>
           <div class="panel__swatches-wrap">
             <button
@@ -156,25 +161,22 @@ const TEMPLATE = `
           </div>
 
           <div class="panel__setting">
-            <span class="panel__setting-label">Format</span>
-            <div class="format-select" data-ref="format-select-wrap">
-              <select class="format-select__control" aria-label="Color format" data-ref="format-select">
-                <option value="hex">HEX</option>
-                <option value="rgb">RGB</option>
-                <option value="hsl">HSL</option>
-                <option value="oklch">OKLCH</option>
-              </select>
-              <svg class="format-select__chevron" viewBox="0 0 24 24" width="12" height="12" aria-hidden="true">
-                <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-              </svg>
+            <span class="panel__setting-label">Palettes</span>
+            <div class="panel__setting-actions">
+              <button type="button" class="panel__palette-btn panel__palette-btn--icon" aria-label="Export All" data-ref="export-palettes">${EXPORT_ICON_HTML}</button>
+              <button type="button" class="panel__palette-btn panel__palette-btn--icon" aria-label="Import" data-ref="import-palettes">${IMPORT_ICON_HTML}</button>
             </div>
           </div>
 
           <div class="panel__setting">
-            <span class="panel__setting-label">Palettes</span>
-            <div class="panel__setting-actions">
-              <button type="button" class="panel__palette-btn" data-ref="export-palettes">Export All</button>
-              <button type="button" class="panel__palette-btn" data-ref="import-palettes">Import</button>
+            <span class="panel__setting-label">Format</span>
+            <div class="format-select">
+              <button type="button" class="format-select__control" aria-label="Color format" aria-haspopup="listbox" aria-expanded="false" data-ref="format-select">
+                <span class="format-select__value" data-ref="format-select-value">HEX</span>
+                <svg class="format-select__chevron" viewBox="0 0 24 24" width="12" height="12" aria-hidden="true">
+                  <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                </svg>
+              </button>
             </div>
           </div>
         </section>
@@ -237,6 +239,7 @@ export class PanelController {
   private host: HTMLDivElement | null = null;
   private shadow: ShadowRoot | null = null;
   private panelEl: HTMLElement | null = null;
+  private formatMenuDismiss: (() => void) | null = null;
   private closeTimer = 0;
   private toastTimer = 0;
   private settings: Settings = {
@@ -303,6 +306,13 @@ export class PanelController {
   };
   private readonly onEscapeKey = (event: KeyboardEvent): void => {
     if (event.key !== "Escape" || !this.isOpen) {
+      return;
+    }
+    // A menu is always the topmost layer — peel it before anything else, so
+    // Escape never closes the whole panel out from under an open dropdown.
+    if (dismissActiveMenu()) {
+      event.preventDefault();
+      event.stopPropagation();
       return;
     }
     if (this.ref<HTMLElement>("import-dialog")?.hidden === false) {
@@ -666,11 +676,14 @@ export class PanelController {
     this.bindEvents();
   }
 
-  private ensureSwatchTooltip(): void {
-    if (this.swatchTooltip || !this.panelEl) {
-      return;
+  private ensureSwatchTooltip(): SwatchTooltipController | null {
+    if (!this.panelEl) {
+      return null;
     }
-    this.swatchTooltip = new SwatchTooltipController(this.panelEl);
+    if (!this.swatchTooltip) {
+      this.swatchTooltip = new SwatchTooltipController(this.panelEl);
+    }
+    return this.swatchTooltip;
   }
 
   private disposeSwatchTooltip(): void {
@@ -769,13 +782,6 @@ export class PanelController {
       "click",
       () => {
         this.setSelectionMode(!this.selectionMode);
-      }
-    );
-
-    this.ref<HTMLButtonElement>("clear-recents")?.addEventListener(
-      "click",
-      () => {
-        this.promptClearRecentColors();
       }
     );
 
@@ -1209,13 +1215,31 @@ export class PanelController {
         });
       });
 
-    this.ref<HTMLSelectElement>("format-select")?.addEventListener(
-      "change",
-      (event) => {
-        const select = event.currentTarget as HTMLSelectElement;
-        void this.updateColorFormat(select.value as ColorFormat);
-      }
-    );
+    const formatBtn = this.ref<HTMLButtonElement>("format-select");
+    if (formatBtn) {
+      this.ensureSwatchTooltip()?.attach(formatBtn, () => "Color format");
+      formatBtn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        this.showFormatMenu(formatBtn);
+      });
+      formatBtn.addEventListener("keydown", (event) => {
+        if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+          event.preventDefault();
+          if (!this.formatMenuDismiss) {
+            this.showFormatMenu(formatBtn);
+          }
+        }
+      });
+    }
+
+    const exportBtn = this.ref<HTMLButtonElement>("export-palettes");
+    if (exportBtn) {
+      this.ensureSwatchTooltip()?.attach(exportBtn, () => "Export All");
+    }
+    const importBtn = this.ref<HTMLButtonElement>("import-palettes");
+    if (importBtn) {
+      this.ensureSwatchTooltip()?.attach(importBtn, () => "Import");
+    }
   }
 
   private startPickerFromEditor(): void {
@@ -1306,51 +1330,12 @@ export class PanelController {
 
   private updateSelectionToggle(): void {
     const toggle = this.ref<HTMLButtonElement>("select-mode-toggle");
-    const clearBtn = this.ref<HTMLButtonElement>("clear-recents");
     const hasRecents = this.settings.recentColors.length > 0;
 
     if (toggle) {
       toggle.hidden = !hasRecents;
       toggle.classList.toggle("is-active", this.selectionMode);
       toggle.textContent = this.selectionMode ? "Cancel" : "Save to palette";
-    }
-
-    if (clearBtn) {
-      clearBtn.hidden = !hasRecents || this.selectionMode;
-      clearBtn.disabled = !hasRecents;
-    }
-  }
-
-  private promptClearRecentColors(): void {
-    if (this.settings.recentColors.length === 0) {
-      return;
-    }
-
-    this.removeSavePaletteConfirmOverlay();
-    this.clearPaletteRowSelection();
-
-    const count = this.settings.recentColors.length;
-    this.mountSavePaletteConfirm({
-      title: "Clear recent colors?",
-      message: `Remove all ${count} recent color${count === 1 ? "" : "s"} from this list.`,
-      confirmLabel: "Clear all",
-      danger: true,
-      onConfirm: () => this.clearAllRecentColors(),
-    });
-  }
-
-  private async clearAllRecentColors(): Promise<void> {
-    try {
-      this.settings = await clearRecentColors();
-      this.selectedRecents.clear();
-      this.setSelectionMode(false);
-      this.renderRecentColors();
-      this.syncPaletteListState();
-      this.updateFooterCta();
-      this.scheduleHostSize();
-      this.showToast("Recent colors cleared");
-    } catch (error) {
-      this.handleStorageError(error);
     }
   }
 
@@ -1541,9 +1526,9 @@ export class PanelController {
         button.setAttribute("aria-checked", selected ? "true" : "false");
       });
 
-    const formatSelect = this.ref<HTMLSelectElement>("format-select");
-    if (formatSelect) {
-      formatSelect.value = this.settings.colorFormat;
+    const formatValue = this.ref<HTMLElement>("format-select-value");
+    if (formatValue) {
+      formatValue.textContent = formatLabel(this.settings.colorFormat);
     }
   }
 
@@ -2019,6 +2004,29 @@ export class PanelController {
         error instanceof Error ? error.message : "Import failed"
       );
     }
+  }
+
+  private showFormatMenu(anchor: HTMLButtonElement): void {
+    if (this.formatMenuDismiss) {
+      // A second click on the trigger closes the menu that click opened.
+      this.formatMenuDismiss();
+      return;
+    }
+
+    this.swatchTooltip?.hide();
+
+    this.formatMenuDismiss = showSelectMenu<ColorFormat>(anchor, {
+      label: "Color format",
+      className: "format-select-menu",
+      options: FORMAT_OPTIONS,
+      selected: this.settings.colorFormat,
+      onSelect: (value) => {
+        void this.updateColorFormat(value);
+      },
+      onClose: () => {
+        this.formatMenuDismiss = null;
+      },
+    });
   }
 
   private showExportMenu(anchor: HTMLButtonElement): void {

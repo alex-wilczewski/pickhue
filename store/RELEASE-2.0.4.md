@@ -1,6 +1,6 @@
 ## PickHue 2.0.4 — Store compliance & UX polish
 
-Chrome Web Store permission fix plus Recent Colors and picker UX improvements.
+Chrome Web Store permission fix plus settings and picker UX improvements.
 
 **Free. No accounts. No tracking. Nothing leaves your machine.**
 
@@ -9,10 +9,12 @@ Chrome Web Store permission fix plus Recent Colors and picker UX improvements.
 ### What's new in 2.0.4
 
 - Removed the unnecessary `tabs` permission (Chrome Web Store: Purple Potassium)
-- Clear all recent colors, with a confirm step
-- Color format setting is now a dropdown (HEX / RGB / HSL / OKLCH)
+- Color format setting is now a dropdown (HEX / RGB / HSL / OKLCH), fully keyboard-navigable
+- Export All and Import are compact icon buttons with tooltips
+- Escape closes an open menu before it closes the panel
 - Empty Recent Colors hint starts the eyedropper (same as Select Color)
 - Loupe color chip stays above the magnifier and flips below near the top edge so it never clips
+- Copy toast clears the loupe hint while picking, and fades a little sooner
 - Copy toast, confirm dialogs, and loupe chip follow light / dark themes more cleanly
 
 ---

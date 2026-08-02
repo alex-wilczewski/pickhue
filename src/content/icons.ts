@@ -14,8 +14,11 @@ export const SETTINGS_ICON_HTML = `<svg class="icon icon--settings" viewBox="0 0
 /** Outline pencil for rename actions. */
 export const RENAME_ICON_HTML = `<svg class="icon icon--rename" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497zM15 5l4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>`;
 
-/** Outline upload/share for export actions. */
-export const EXPORT_ICON_HTML = `<svg class="icon icon--export" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>`;
+/** Outline arrow-up-tray (Heroicons) for export actions. */
+export const EXPORT_ICON_HTML = `<svg class="icon icon--export" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>`;
+
+/** Outline arrow-down-tray (Heroicons) for import actions. */
+export const IMPORT_ICON_HTML = `<svg class="icon icon--import" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M12 3v12.75m0 0 4.5-4.5M12 15.75l-4.5-4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>`;
 
 /** Outline up/down arrows for drag-to-reorder. */
 export const MOVE_ICON_HTML = `<svg class="icon icon--move" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M7 20V4M4 7l3-3 3 3M17 4v16M20 17l-3 3-3-3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>`;
