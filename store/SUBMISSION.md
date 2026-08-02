@@ -29,6 +29,9 @@ Open `dist/manifest.json` and confirm:
 - [ ] Format dropdown by keyboard: arrows move, Home/End jump, Enter picks, Escape closes the menu but leaves the panel open
 - [ ] Clicking the Format trigger a second time closes the menu
 - [ ] Export All / Import icon buttons show tooltips and run the right action
+- [ ] Palette editor: clicking a recents swatch adds it; clicking it again removes it; added ones show a check
+- [ ] Palette editor: the color well is the same height empty as it is with one color
+- [ ] Palette editor: recents strip scrolls horizontally with fade edges when it overflows
 - [ ] Empty Recent Colors text starts the picker
 - [ ] Loupe color chip stays visible at the bottom of a tall page; flips below near the top
 - [ ] Copy toast clears the loupe hint while the picker is open
@@ -50,7 +53,7 @@ Open `dist/manifest.json` and confirm:
 If you want store visitors to see update copy, your only options are:
 
 1. **Optional:** Edit the **Store listing** → **Detailed description** and prepend a line such as:
-   > What’s new in 2.0.4: Removed unused tabs permission; keyboard-navigable format dropdown; icon Export/Import buttons; loupe chip stays on-screen; empty-state Select Color shortcut.
+   > What’s new in 2.0.4: Removed unused tabs permission; keyboard-navigable format dropdown; one-click recents in the palette editor; icon Export/Import buttons; loupe chip stays on-screen.
 2. **After approval:** Mention the update on https://pickhue.site or in GitHub release comments.
 
 You do **not** need to change listing text to ship 2.0.4.

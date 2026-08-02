@@ -11,6 +11,8 @@ Chrome Web Store permission fix plus settings and picker UX improvements.
 - Removed the unnecessary `tabs` permission (Chrome Web Store: Purple Potassium)
 - Color format setting is now a dropdown (HEX / RGB / HSL / OKLCH), fully keyboard-navigable
 - Export All and Import are compact icon buttons with tooltips
+- Recent colors now sit inline in the palette editor — one click to add, click again to remove, no modal
+- The palette color well no longer resizes when you add your first color
 - Escape closes an open menu before it closes the panel
 - Empty Recent Colors hint starts the eyedropper (same as Select Color)
 - Loupe color chip stays above the magnifier and flips below near the top edge so it never clips

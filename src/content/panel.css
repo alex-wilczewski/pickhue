@@ -154,7 +154,6 @@ button {
 .panel__section-action,
 .panel__modal-btn,
 .panel__io-btn--accent,
-.palette-editor__recents-confirm,
 .palette-editor__action-btn--danger,
 .palette-menu__item--danger,
 .panel__save-palette-confirm-btn {
@@ -1127,6 +1126,11 @@ button {
   padding: 4px;
   box-sizing: border-box;
   width: 100%;
+  /* One swatch row (36px) + the 4px track inset, so the well is the same size
+     empty as it is holding its first color. Matches .panel__swatches-wrap. */
+  min-height: 44px;
+  display: flex;
+  align-items: center;
 }
 
 .palette-editor__swatches-grid {
@@ -1139,10 +1143,12 @@ button {
 
 .palette-editor__empty {
   margin: 0;
+  width: 100%;
   font-size: 12px;
+  line-height: 1.2;
   color: var(--text-muted);
   text-align: center;
-  padding: 8px 4px;
+  padding: 0 4px;
 }
 
 .palette-editor__empty-action {
@@ -1243,11 +1249,56 @@ button {
   cursor: not-allowed;
 }
 
-.palette-editor__add-btn--recents {
-  display: block;
+.palette-editor__recents {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 var(--editor-inset) 12px;
+}
+
+.palette-editor__recents-label {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+}
+
+/* The home track is a fixed 280px; the editor well runs the full inset width. */
+.palette-editor__recents-track.panel__swatches-wrap {
   width: 100%;
-  text-align: center;
-  line-height: 1;
+}
+
+.palette-editor__recents-swatch {
+  cursor: pointer;
+}
+
+.palette-editor__recents-item {
+  position: relative;
+}
+
+/* Scrim over the swatch rather than fading it — dimming the swatch itself
+   blends it into the track and the hue stops being recognizable. */
+.palette-editor__recents-check {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: 11px;
+  background: rgba(0, 0, 0, 0.42);
+  color: #fff;
+  pointer-events: none;
+}
+
+.palette-editor__recents-swatch.is-added + .palette-editor__recents-check {
+  display: flex;
+}
+
+.palette-editor__recents-check .icon {
+  display: block;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.45));
 }
 
 .palette-editor__paste {
@@ -1312,179 +1363,6 @@ button {
 .palette-editor__action-btn--with-icon .icon--delete {
   flex-shrink: 0;
   margin-top: -1px;
-}
-
-.palette-editor__recents-overlay {
-  position: absolute;
-  inset: 0;
-  z-index: 35;
-  background: rgba(0, 0, 0, 0.45);
-  display: grid;
-  place-items: center;
-  padding: 12px var(--editor-inset);
-}
-
-.palette-editor__recents-dialog {
-  --recents-swatch: 32px;
-  --recents-gap: 4px;
-  --recents-inset: 4px;
-  --recents-shell-bleed-x: 4px;
-  position: relative;
-  isolation: isolate;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  width: fit-content;
-  min-width: min(240px, 100%);
-  max-width: 100%;
-  max-height: 100%;
-  overflow: visible;
-  background: transparent;
-  border: none;
-  /* Continues the concentric progression: swatch 11 + 4 = track 15, track 15 +
-     4 = shell 19, so the outer box stays rounder than the swatch track it
-     wraps. (::before inherits this radius.) */
-  border-radius: 19px;
-  padding: 14px 13px;
-  box-sizing: border-box;
-}
-
-.palette-editor__recents-dialog::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: calc(-1 * var(--recents-shell-bleed-x));
-  right: calc(-1 * var(--recents-shell-bleed-x));
-  background: var(--menu-bg);
-  border: 1px solid var(--divider);
-  border-radius: inherit;
-  z-index: 0;
-  pointer-events: none;
-}
-
-.palette-editor__recents-dialog > * {
-  position: relative;
-  z-index: 1;
-}
-
-.palette-editor__recents-title {
-  margin: 0 0 12px;
-  padding: 0;
-  font-size: 13px;
-  font-weight: 600;
-  flex-shrink: 0;
-}
-
-.palette-editor__recents-swatches.palette-editor__swatches {
-  flex-shrink: 1;
-  min-height: 0;
-  width: fit-content;
-  max-width: 100%;
-  align-self: flex-start;
-  margin: 0 0 14px;
-  padding: var(--recents-inset);
-  max-height: calc(
-    4 * var(--recents-swatch) + 3 * var(--recents-gap) + 2 * var(--recents-inset) + 4px
-  );
-  overflow-x: hidden;
-  overflow-y: auto;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-
-.palette-editor__recents-swatches .palette-editor__swatches-grid {
-  width: max-content;
-  max-width: calc(7 * var(--recents-swatch) + 6 * var(--recents-gap));
-  gap: var(--recents-gap);
-}
-
-.palette-editor__recents-swatches .palette-editor__swatch-item {
-  flex: 0 0 var(--recents-swatch);
-  width: var(--recents-swatch);
-  height: var(--recents-swatch);
-}
-
-.palette-editor__recents-swatches .palette-editor__recents-pick,
-.palette-editor__recents-swatches .swatch {
-  width: var(--recents-swatch);
-  height: var(--recents-swatch);
-  border-radius: 11px;
-}
-
-.palette-editor__recents-swatches::-webkit-scrollbar {
-  display: none;
-}
-
-.palette-editor__recents-pick {
-  cursor: pointer;
-}
-
-.palette-editor__recents-pick.is-selected {
-  position: relative;
-  z-index: 1;
-  outline: 2px solid var(--accent);
-  outline-offset: -1px;
-}
-
-.palette-editor__recents-tooltip {
-  position: absolute;
-  z-index: 2;
-  pointer-events: none;
-  padding: 5px 9px;
-  border-radius: 8px;
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.01em;
-  line-height: 1.3;
-  white-space: nowrap;
-  background: var(--menu-bg);
-  color: var(--text);
-  border: 1px solid var(--divider);
-  box-shadow:
-    0 8px 20px rgba(0, 0, 0, 0.32),
-    0 1px 3px rgba(0, 0, 0, 0.18);
-}
-
-.palette-editor__recents-tooltip[hidden] {
-  display: none;
-}
-
-.palette-editor__recents-actions {
-  display: flex;
-  gap: 6px;
-  flex-shrink: 0;
-  padding: 0;
-  width: 100%;
-}
-
-.palette-editor__recents-actions .palette-editor__action-btn {
-  flex: 1;
-}
-
-.palette-editor__recents-actions .palette-editor__action-btn,
-.palette-editor__recents-confirm {
-  white-space: nowrap;
-}
-
-.palette-editor__recents-confirm {
-  flex: 1;
-  padding: 8px 12px;
-  border-radius: 8px;
-  font-size: 12px;
-  font-weight: 500;
-  background: var(--accent);
-  color: var(--accent-text);
-  border: none;
-}
-
-.palette-editor__recents-confirm:hover:not(:disabled) {
-  background: var(--accent-hover);
-}
-
-.palette-editor__recents-confirm:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
 }
 
 .palette-editor__confirm-overlay {
