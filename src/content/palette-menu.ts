@@ -1,3 +1,4 @@
+import { PLUS_ICON_HTML } from "./icons";
 import type { ColorPalette } from "../shared/types";
 
 export interface PaletteMenuCallbacks {
@@ -127,21 +128,21 @@ function applyToastMenuSurface(
   menu.dataset.theme = theme;
   menu.style.position = "fixed";
   menu.style.zIndex = "2147483647";
-  menu.style.borderRadius = "14px";
+  menu.style.borderRadius = "16px";
   menu.style.padding = "4px";
-  menu.style.minWidth = "160px";
-  menu.style.maxWidth = "240px";
+  menu.style.minWidth = "220px";
+  menu.style.maxWidth = "264px";
   menu.style.maxHeight = "220px";
   menu.style.overflowY = "auto";
   menu.style.fontFamily = '"Geist", "Segoe UI", system-ui, sans-serif';
 
   if (theme === "light") {
-    menu.style.background = "rgba(255, 255, 255, 0.94)";
+    menu.style.background = "var(--pickhue-surface, rgba(255, 255, 255, 0.94))";
     menu.style.border = "1px solid rgba(20, 20, 20, 0.14)";
     menu.style.boxShadow = "0 16px 40px rgba(0, 0, 0, 0.12)";
     menu.style.color = "#141414";
   } else {
-    menu.style.background = "rgba(20, 20, 20, 0.94)";
+    menu.style.background = "var(--pickhue-surface, rgba(20, 20, 20, 0.94))";
     menu.style.border = "1px solid rgba(255, 255, 255, 0.08)";
     menu.style.boxShadow = "0 16px 40px rgba(0, 0, 0, 0.28)";
     menu.style.color = "#f6f6f6";
@@ -163,7 +164,10 @@ function styleToastMenuItem(item: HTMLElement, theme: "light" | "dark"): void {
 }
 
 function styleToastActionItem(item: HTMLElement, theme: "light" | "dark"): void {
-  const link = theme === "light" ? "#3d6b0f" : "#b8f06a";
+  const link =
+    theme === "light"
+      ? "var(--pickhue-accent-link, #a7031a)"
+      : "var(--pickhue-accent-link, #ffb9b3)";
   const hover = theme === "light" ? "#141414" : "#f6f6f6";
   item.style.color = link;
   item.style.justifyContent = "flex-start";
@@ -213,14 +217,30 @@ export function showPaletteMenu(
     }
     item.setAttribute("role", "menuitem");
 
+    if (options?.actionItem) {
+      // Same + glyph as the toast's save action, so the affordances rhyme.
+      const icon = document.createElement("span");
+      icon.className = "palette-menu__action-icon";
+      icon.innerHTML = PLUS_ICON_HTML;
+      icon.style.display = "inline-flex";
+      icon.style.alignItems = "center";
+      icon.style.flexShrink = "0";
+      item.append(icon);
+    }
+
     const name = document.createElement("span");
     name.className = "palette-menu__name";
     name.textContent = label;
+    // Flex child: without min-width:0 long names push the swatches instead of
+    // truncating into the ellipsis.
+    name.style.minWidth = "0";
+    name.style.flex = "1 1 auto";
     item.append(name);
 
     if (options?.swatches?.length) {
       const strip = document.createElement("span");
       strip.className = "palette-menu__swatches";
+      strip.style.flexShrink = "0";
       for (const hex of options.swatches.slice(0, 4)) {
         const dot = document.createElement("span");
         dot.className = "palette-menu__dot";
@@ -264,7 +284,7 @@ export function showPaletteMenu(
       divider.style.background =
         toastTheme === "light"
           ? "rgba(20, 20, 20, 0.14)"
-          : "rgba(246, 246, 246, 0.12)";
+          : "rgba(246, 246, 246, 0.2)";
     }
     menu.append(divider);
   }
@@ -283,6 +303,15 @@ export function showPaletteMenu(
     });
   } else {
     menu.classList.add("palette-menu--toast");
+    const accentSource = anchor.closest<HTMLElement>(".pickhue-copy-toast");
+    if (accentSource) {
+      for (const prop of ["--pickhue-surface", "--pickhue-accent-link"]) {
+        const value = accentSource.style.getPropertyValue(prop);
+        if (value) {
+          menu.style.setProperty(prop, value);
+        }
+      }
+    }
     applyToastMenuSurface(menu, toastTheme);
     document.body.append(menu);
     const toastEl = anchor.closest(".pickhue-copy-toast");
@@ -494,6 +523,8 @@ export function showSelectMenu<T extends string>(
 export interface ActionMenuItem {
   label: string;
   action: () => void | Promise<void>;
+  danger?: boolean;
+  iconHtml?: string;
 }
 
 export function showActionMenu(
@@ -512,7 +543,15 @@ export function showActionMenu(
     button.type = "button";
     button.className = "palette-menu__item";
     button.setAttribute("role", "menuitem");
-    button.textContent = item.label;
+    if (item.danger) {
+      button.classList.add("palette-menu__item--danger");
+    }
+    if (item.iconHtml) {
+      button.classList.add("palette-menu__item--with-icon");
+      button.innerHTML = `${item.iconHtml}<span>${item.label}</span>`;
+    } else {
+      button.textContent = item.label;
+    }
     button.addEventListener("click", (event) => {
       event.stopPropagation();
       void item.action();

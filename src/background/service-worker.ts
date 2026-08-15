@@ -1,4 +1,5 @@
 import { isGalleryUrl } from "../shared/gallery";
+import { UNINSTALL_FEEDBACK_URL, WHATS_NEW_URL } from "../shared/site";
 import { addRecentColor } from "../shared/storage";
 
 const CONTENT_SCRIPT = "content.js";
@@ -92,6 +93,45 @@ chrome.action.onClicked.addListener((tab) => {
   })();
 });
 
+chrome.runtime.onInstalled.addListener((details) => {
+  void chrome.runtime.setUninstallURL(UNINSTALL_FEEDBACK_URL);
+
+  // Show the 3.0 redesign once to users crossing the major-version boundary.
+  if (details.reason === "update") {
+    const previousMajor = parseInt(
+      details.previousVersion?.split(".")[0] ?? "0",
+      10
+    );
+    const currentMajor = parseInt(
+      chrome.runtime.getManifest().version.split(".")[0] ?? "0",
+      10
+    );
+    if (previousMajor < 3 && currentMajor >= 3) {
+      void chrome.tabs.create({ url: WHATS_NEW_URL });
+    }
+  }
+});
+
+// Keyboard shortcut (see manifest commands) starts the eyedropper directly.
+chrome.commands.onCommand.addListener((command, tab) => {
+  if (command !== "start-picker") {
+    return;
+  }
+  void (async () => {
+    let target = tab;
+    if (!target?.id) {
+      [target] = await chrome.tabs.query({
+        active: true,
+        currentWindow: true,
+      });
+    }
+    if (!target?.id || isHardRestricted(target.url) || isGalleryUrl(target.url)) {
+      return;
+    }
+    await sendToContent(target.id, "START_PICKER");
+  })();
+});
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "CAPTURE_TAB") {
     const windowId = sender.tab?.windowId ?? chrome.windows.WINDOW_ID_CURRENT;
@@ -111,6 +151,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === "COLOR_PICKED") {
     void addRecentColor(message.hex);
+  }
+
+  if (message.type === "OPEN_SHORTCUTS") {
+    void chrome.tabs.create({ url: "chrome://extensions/shortcuts" });
+  }
+
+  if (message.type === "GET_PICKER_SHORTCUT") {
+    void chrome.commands.getAll().then((commands) => {
+      const command = commands.find((entry) => entry.name === "start-picker");
+      sendResponse({ shortcut: command?.shortcut ?? "" });
+    });
+    return true;
   }
 
   return undefined;

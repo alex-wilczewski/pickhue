@@ -2,6 +2,21 @@
 
 All notable changes to PickHue are documented here.
 
+## [3.0.0] — 2026-08-15
+
+**Dynamic accent release.** PickHue now wears your colors: the whole UI derives its accent from your last pick, plus a full UX overhaul of the picker, toasts, and palette editor.
+
+- **Dynamic accent** — panel, toasts, menus, and picker hint take their accent from your most recent pick, derived in OKLCH with chroma-aware lightness and contrast-guaranteed text. Near-neutral picks fall back to the new **coral** default; the lime green accent is retired
+- **Tinted chrome** — panel and overlay surfaces carry a whisper of the accent hue in both themes
+- **Loupe**: the glass ring previews the hovered color, the zoom badge lives on the glass, and the hint pill reads as a clean three-verb sentence
+- **Keyboard**: `Alt+Shift+P` starts the eyedropper (remappable — shown in Extension Settings), arrow keys nudge the sample point one pixel (`Shift` = 10), `Enter` picks
+- **Copy toast**: compact concentric shell (radius = swatch + inset), **+** icon save action that morphs into a check with "Added to *palette*", hover pauses auto-dismiss, tinted save menu (wider, name truncation, **+** New palette)
+- **Panel**: Save to palette is a **+** icon action with tooltip; palette row gear is now a filled ellipsis with color-only hover; text-only toasts render as rounded rectangles instead of pills
+- **Palette editor overhaul**: name + meta row (color count, promoted Export, **⋯** menu with new **Duplicate** and Delete), bottom actions row removed, insertion-bar drag reorder (also on saved palette rows in move mode), **keyboard reorder** (arrows move a focused swatch, Shift jumps to ends), live paste-input validation, **+** Add icon, icons across both export menus
+- **Shades & tints** — every palette swatch opens a 10-step Tailwind-scale OKLCH ramp; click a step to copy, hover **+** to add it to the palette
+- **Tailwind config export** alongside hex list, CSS variables, ASE, and JSON
+- What's-new page opens once after the 3.0 update; uninstall feedback link; `prefers-reduced-motion` fallbacks across all animations
+
 ## [2.0.4] — 2026-08-01
 
 Chrome Web Store compliance fix and settings / picker UX polish.

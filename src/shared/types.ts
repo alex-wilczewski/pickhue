@@ -38,7 +38,9 @@ export type Message =
   | { type: "TOGGLE_PANEL" }
   | { type: "START_PICKER" }
   | { type: "CAPTURE_TAB" }
-  | { type: "COLOR_PICKED"; hex: string };
+  | { type: "COLOR_PICKED"; hex: string }
+  | { type: "OPEN_SHORTCUTS" }
+  | { type: "GET_PICKER_SHORTCUT" };
 
 export const DEFAULT_SETTINGS: Settings = {
   themeMode: "system",

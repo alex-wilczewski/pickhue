@@ -224,6 +224,25 @@ export function exportPalettesCss(palettes: ColorPalette[]): string {
     .join("\n\n");
 }
 
+export function exportPalettesTailwind(palettes: ColorPalette[]): string {
+  const seen = new Map<string, number>();
+  const entries = palettes
+    .map((palette) => {
+      let slug = slugifyPaletteName(palette.name);
+      const count = seen.get(slug) ?? 0;
+      seen.set(slug, count + 1);
+      if (count > 0) {
+        slug = `${slug}-${count + 1}`;
+      }
+      const colors = palette.colors
+        .map((hex, index) => `          "${index + 1}": "${hex.toLowerCase()}",`)
+        .join("\n");
+      return `        "${slug}": {\n${colors}\n        },`;
+    })
+    .join("\n");
+  return `/** PickHue palettes — merge into tailwind.config.js */\nmodule.exports = {\n  theme: {\n    extend: {\n      colors: {\n${entries}\n      },\n    },\n  },\n};\n`;
+}
+
 export function downloadBlob(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");

@@ -1,3 +1,4 @@
+import { deriveAccentTokens, tintedOverlaySurface } from "../shared/accent";
 import { copyText } from "../shared/clipboard";
 import { formatColor } from "../shared/colors";
 import { colorDistanceSq, probeDomColor } from "../shared/dom-color";
@@ -12,6 +13,10 @@ import {
 import type { ColorFormat } from "../shared/types";
 
 const PICKER_ID = "pickhue-picker-root";
+/** Icon-only save action in the copy toast (label lives in aria-label/title). */
+const TOAST_PLUS_ICON = `<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>`;
+const TOAST_CHECK_ICON = `<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>`;
+let lastToastHex: string | null = null;
 const TOAST_ID = "pickhue-copy-toast";
 let toastHideTimer = 0;
 let toastPointerTimer = 0;
@@ -78,6 +83,9 @@ export class EyedropperOverlay {
   private zoom = ZOOM_DEFAULT;
   private lastPickedHex: string | null = null;
   private hint: HTMLParagraphElement | null = null;
+  private glassEl: HTMLDivElement | null = null;
+  private zoomBadge: HTMLSpanElement | null = null;
+  private accentPick: string | null = null;
   private capturePending = false;
   private scrollCapturePending = false;
   private scrollCaptureTimer = 0;
@@ -101,6 +109,7 @@ export class EyedropperOverlay {
       if (toast) {
         toast.dataset.theme = theme;
       }
+      this.applyOverlayAccents();
       this.updateHint();
     });
   };
@@ -122,6 +131,34 @@ export class EyedropperOverlay {
     if (this.isZoomOutKey(event)) {
       event.preventDefault();
       this.adjustZoom(-ZOOM_STEP);
+      return;
+    }
+
+    if (event.key === "Enter" && this.hasPointer) {
+      event.preventDefault();
+      event.stopPropagation();
+      this.pickAt(this.pointerX, this.pointerY);
+      return;
+    }
+
+    // Pixel nudge for precise picks (Shift = 10px). The render loop follows
+    // pointerX/Y, so moving the virtual pointer is all it takes.
+    const step = event.shiftKey ? 10 : 1;
+    const nudge: Record<string, [number, number]> = {
+      ArrowUp: [0, -step],
+      ArrowDown: [0, step],
+      ArrowLeft: [-step, 0],
+      ArrowRight: [step, 0],
+    };
+    const delta = nudge[event.key];
+    if (delta && this.hasPointer) {
+      event.preventDefault();
+      event.stopPropagation();
+      const viewport = window.visualViewport;
+      const maxX = (viewport?.width ?? window.innerWidth) - 1;
+      const maxY = (viewport?.height ?? window.innerHeight) - 1;
+      this.pointerX = Math.min(maxX, Math.max(0, this.pointerX + delta[0]));
+      this.pointerY = Math.min(maxY, Math.max(0, this.pointerY + delta[1]));
     }
   };
 
@@ -143,7 +180,16 @@ export class EyedropperOverlay {
       return;
     }
     this.zoom = next;
-    this.updateHint();
+    this.updateZoomBadge();
+  }
+
+  private updateZoomBadge(): void {
+    if (!this.zoomBadge) {
+      return;
+    }
+    const pct = Math.round(this.zoom * 100);
+    this.zoomBadge.textContent = `${pct}%`;
+    this.zoomBadge.classList.toggle("is-visible", pct !== 100);
   }
 
   private onScroll = (): void => {
@@ -168,6 +214,7 @@ export class EyedropperOverlay {
     const settings = await getSettings();
     this.colorFormat = settings.colorFormat;
     this.uiTheme = resolveTheme(settings.themeMode);
+    this.accentPick = settings.recentColors[0] ?? null;
 
     const response = (await chrome.runtime.sendMessage({
       type: "CAPTURE_TAB",
@@ -396,7 +443,11 @@ export class EyedropperOverlay {
     const reticle = document.createElement("div");
     reticle.className = "pickhue-loupe__reticle";
 
-    glass.append(lens, reticle);
+    this.zoomBadge = document.createElement("span");
+    this.zoomBadge.className = "pickhue-loupe__zoom";
+
+    glass.append(lens, reticle, this.zoomBadge);
+    this.glassEl = glass;
 
     const info = document.createElement("div");
     info.className = "pickhue-loupe__info";
@@ -418,6 +469,8 @@ export class EyedropperOverlay {
     this.updateHint();
 
     this.root.append(this.loupe, this.hint);
+    this.applyOverlayAccents();
+    this.updateZoomBadge();
     document.documentElement.append(this.root);
     syncToastAboveHint();
 
@@ -493,18 +546,30 @@ export class EyedropperOverlay {
     if (hex && this.hexLabel && this.swatchDot) {
       this.hexLabel.textContent = formatColor(hex, this.colorFormat);
       this.swatchDot.style.backgroundColor = hex;
+      // The glass ring previews the hovered color (see picker.css --pickhue-ring).
+      this.glassEl?.style.setProperty("--pickhue-ring", hex);
     }
+  }
+
+  /** Hint accent + tinted surfaces derive from the most recent pick. */
+  private applyOverlayAccents(): void {
+    if (!this.root) {
+      return;
+    }
+    const tokens = deriveAccentTokens(this.accentPick, this.uiTheme);
+    this.root.style.setProperty("--pickhue-accent-link", tokens.accentLink);
+    this.root.style.setProperty(
+      "--pickhue-surface",
+      tintedOverlaySurface(this.accentPick, this.uiTheme)
+    );
   }
 
   private updateHint(): void {
     if (!this.hint) {
       return;
     }
-    const zoomPct = Math.round(this.zoom * 100);
     this.hint.innerHTML =
-      zoomPct === 100
-        ? "<b>+</b>/<b>&minus;</b> to zoom &middot; <b>Click</b> to pick &middot; <b>Esc</b> to close"
-        : `<b>+</b>/<b>&minus;</b> to zoom &middot; <b>${zoomPct}%</b> &middot; <b>Click</b> to pick &middot; <b>Esc</b> to close`;
+      "<b>+</b>/<b>&minus;</b> to zoom &middot; <b>Click</b> to pick &middot; <b>Esc</b> to close";
   }
 
   private handleClick = (event: MouseEvent): void => {
@@ -514,8 +579,11 @@ export class EyedropperOverlay {
     if (!this.hasPointer) {
       return;
     }
+    this.pickAt(event.clientX, event.clientY);
+  };
 
-    const hex = this.resolveColorAt(event.clientX, event.clientY);
+  private pickAt(clientX: number, clientY: number): void {
+    const hex = this.resolveColorAt(clientX, clientY);
     if (!hex) {
       return;
     }
@@ -529,7 +597,7 @@ export class EyedropperOverlay {
     this.lastPickedHex = hex;
     this.stop("pick");
     showCopyToast(formatted, hex);
-  };
+  }
 
   private drawLens(): void {
     const lensCtx = this.lensCtx;
@@ -635,12 +703,24 @@ function syncOpenToastTheme(theme: "light" | "dark"): void {
   const toast = document.getElementById(TOAST_ID);
   if (toast) {
     toast.dataset.theme = theme;
+    applyToastAccent(toast, theme);
   }
   document
     .querySelectorAll<HTMLElement>(".palette-menu--toast")
     .forEach((menu) => {
       menu.dataset.theme = theme;
+      applyToastAccent(menu, theme);
     });
+}
+
+/** Tint the toast/menu surface + accent link from the just-picked color. */
+function applyToastAccent(el: HTMLElement, theme: "light" | "dark"): void {
+  const tokens = deriveAccentTokens(lastToastHex, theme);
+  el.style.setProperty("--pickhue-accent-link", tokens.accentLink);
+  el.style.setProperty(
+    "--pickhue-surface",
+    tintedOverlaySurface(lastToastHex, theme)
+  );
 }
 
 async function showCopyToastAsync(formatted: string, hex: string): Promise<void> {
@@ -651,6 +731,18 @@ async function showCopyToastAsync(formatted: string, hex: string): Promise<void>
     toast.id = TOAST_ID;
     toast.className = "pickhue-copy-toast";
     document.documentElement.append(toast);
+
+    // Hovering holds the toast open so the save action can't vanish mid-reach.
+    toast.addEventListener("mouseenter", () => {
+      if (toast?.classList.contains("is-visible")) {
+        clearToastHideTimers();
+      }
+    });
+    toast.addEventListener("mouseleave", () => {
+      if (toast?.classList.contains("is-visible") && !toastPaletteMenuOpen) {
+        scheduleToastHide(1200);
+      }
+    });
   }
 
   toastPaletteMenuOpen = false;
@@ -659,12 +751,13 @@ async function showCopyToastAsync(formatted: string, hex: string): Promise<void>
   const settings = await getSettings();
   const theme = resolveTheme(settings.themeMode);
   toast.dataset.theme = theme;
+  lastToastHex = hex;
   syncOpenToastTheme(theme);
 
   toast.innerHTML = `
     <span class="pickhue-copy-toast__swatch" style="background-color:${hex}"></span>
     <span class="pickhue-copy-toast__text">Copied ${formatted}</span>
-    <button type="button" class="pickhue-copy-toast__save">Save to palette</button>
+    <button type="button" class="pickhue-copy-toast__save pickhue-copy-toast__save--icon" aria-label="Save to palette" title="Save to palette">${TOAST_PLUS_ICON}</button>
   `;
   toast.style.pointerEvents = "auto";
 
@@ -749,9 +842,10 @@ async function openPickToastPaletteMenu(
   showPaletteMenu(document, anchor, palettes, {
     onSelect: async (paletteId) => {
       completed = true;
+      const name = palettes.find((p) => p.id === paletteId)?.name;
       try {
         await addColorToPalette(paletteId, hex);
-        showPaletteSavedToast(hex, "Saved to palette");
+        showPaletteSavedToast(hex, name ? `Added to ${name}` : "Added to palette", true);
       } catch {
         showPaletteSavedToast(hex, "Could not save");
       }
@@ -760,7 +854,7 @@ async function openPickToastPaletteMenu(
       completed = true;
       try {
         await createPalette("Untitled palette", [hex]);
-        showPaletteSavedToast(hex, "Created new palette");
+        showPaletteSavedToast(hex, "Created new palette", true);
       } catch {
         showPaletteSavedToast(hex, "Could not create palette");
       }
@@ -775,7 +869,11 @@ async function openPickToastPaletteMenu(
   });
 }
 
-function showPaletteSavedToast(hex: string, message: string): void {
+function showPaletteSavedToast(
+  hex: string,
+  message: string,
+  saved = false
+): void {
   const toast = document.getElementById(TOAST_ID);
   if (!toast) {
     return;
@@ -783,11 +881,24 @@ function showPaletteSavedToast(hex: string, message: string): void {
   toast.classList.add("is-visible");
   toast.style.pointerEvents = "auto";
   const text = toast.querySelector(".pickhue-copy-toast__text");
-  const saveBtn = toast.querySelector(".pickhue-copy-toast__save");
+  const saveBtn = toast.querySelector<HTMLButtonElement>(
+    ".pickhue-copy-toast__save"
+  );
   if (text) {
     text.textContent = message;
   }
-  saveBtn?.remove();
+  if (saveBtn) {
+    if (saved) {
+      // Morph + into a check: confirmation without a second toast.
+      saveBtn.innerHTML = TOAST_CHECK_ICON;
+      saveBtn.classList.add("is-saved");
+      saveBtn.setAttribute("aria-label", "Saved");
+      saveBtn.title = "";
+      saveBtn.disabled = true;
+    } else {
+      saveBtn.remove();
+    }
+  }
   const swatch = toast.querySelector<HTMLElement>(
     ".pickhue-copy-toast__swatch"
   );

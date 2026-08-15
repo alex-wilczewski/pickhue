@@ -45,10 +45,10 @@ button {
   --text: #ffffff;
   --text-muted: rgba(246, 246, 246, 0.65);
   --divider: rgba(246, 246, 246, 0.12);
-  --accent: #87d624;
+  --accent: #fa7c75;
   --accent-text: #141414;
-  --accent-hover: #a3ee3a;
-  --accent-link: #b8f06a;
+  --accent-hover: #ff958d;
+  --accent-link: #ffb9b3;
   --danger: #d64545;
   --danger-text: #ffffff;
   --danger-hover: #bf3a3a;
@@ -117,10 +117,10 @@ button {
   --text: #141414;
   --text-muted: rgba(20, 20, 20, 0.72);
   --divider: rgba(20, 20, 20, 0.14);
-  --accent: #7bc32e;
+  --accent: #d75d57;
   --accent-text: #141414;
-  --accent-hover: #8ed033;
-  --accent-link: #3d6b0f;
+  --accent-hover: #e76b65;
+  --accent-link: #a7031a;
   --danger: #dc2626;
   --danger-text: #ffffff;
   --danger-hover: #b91c1c;
@@ -250,6 +250,21 @@ button {
 
 .panel__section-action:hover:not(:disabled) {
   color: var(--text);
+}
+
+.panel__section-action--icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 8px;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.panel__section-action--icon:hover:not(:disabled) {
+  background: var(--divider);
 }
 
 .panel__section-action.is-active {
@@ -689,12 +704,42 @@ button {
 }
 
 .panel__palettes--move-mode .panel__palette-row.is-moving.is-dragging {
-  opacity: 0.45;
+  opacity: 0.35;
   cursor: grabbing;
 }
 
-.panel__palettes--move-mode .panel__palette-row.is-drop-target {
-  box-shadow: inset 0 0 0 2px var(--accent);
+/* Insertion bar in the 6px row gap — same indicator as the editor grid. */
+.panel__palette-row {
+  position: relative;
+}
+
+.panel__palette-row.is-insert-above::before,
+.panel__palette-row.is-insert-below::after {
+  content: "";
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+  z-index: 2;
+  pointer-events: none;
+  animation: pickhue-insert-in-x 0.12s ease;
+}
+
+.panel__palette-row.is-insert-above::before {
+  top: calc(var(--palette-row-gap, 6px) / -2 - 1px);
+}
+
+.panel__palette-row.is-insert-below::after {
+  bottom: calc(var(--palette-row-gap, 6px) / -2 - 1px);
+}
+
+@keyframes pickhue-insert-in-x {
+  from {
+    opacity: 0;
+    transform: scaleX(0.7);
+  }
 }
 
 .panel__palette-main {
@@ -762,9 +807,12 @@ button {
   flex-shrink: 0;
 }
 
+.panel__palette-menu-btn {
+  color: var(--text-muted);
+}
+
 .panel__palette-menu-btn:hover:not(:disabled) {
-  background: var(--menu-bg);
-  border-color: var(--control-border);
+  color: var(--text);
 }
 
 .panel__palette-menu-btn:disabled {
@@ -774,10 +822,10 @@ button {
   pointer-events: none;
 }
 
-.panel__palette-menu-btn .icon--settings {
+.panel__palette-menu-btn .icon--ellipsis {
   display: block;
-  width: 13px;
-  height: 13px;
+  width: 15px;
+  height: 15px;
   flex-shrink: 0;
 }
 
@@ -1050,9 +1098,17 @@ button {
 }
 
 .palette-menu__name {
+  flex: 1 1 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.palette-menu__action-icon {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
 }
 
 .palette-menu__swatches {
@@ -1133,6 +1189,68 @@ button {
   align-items: center;
 }
 
+.palette-editor__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.palette-editor__count {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.palette-editor__meta-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.palette-editor__export-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--accent-link);
+  padding: 3px 8px;
+  border-radius: 8px;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.palette-editor__export-btn .icon {
+  width: 12px;
+  height: 12px;
+}
+
+.palette-editor__export-btn:hover:not(:disabled) {
+  background: var(--divider);
+  color: var(--text);
+}
+
+.palette-editor__export-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.palette-editor__more-btn {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  color: var(--text-muted);
+  transition: color 0.15s ease;
+}
+
+.palette-editor__more-btn:hover {
+  color: var(--text);
+}
+
 .palette-editor__swatches-grid {
   display: flex;
   flex-wrap: wrap;
@@ -1172,13 +1290,38 @@ button {
 }
 
 .palette-editor__swatch-item.is-dragging {
-  opacity: 0.45;
+  opacity: 0.35;
   cursor: grabbing;
 }
 
-.palette-editor__swatch-item.is-drop-target .swatch {
-  outline: 2px solid var(--accent);
-  outline-offset: -1px;
+/* Insertion bar: lives in the 4px grid gap, marking where the color lands. */
+.palette-editor__swatch-item.is-insert-before::before,
+.palette-editor__swatch-item.is-insert-after::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+  z-index: 2;
+  pointer-events: none;
+  animation: pickhue-insert-in 0.12s ease;
+}
+
+.palette-editor__swatch-item.is-insert-before::before {
+  left: -3px;
+}
+
+.palette-editor__swatch-item.is-insert-after::after {
+  right: -3px;
+}
+
+@keyframes pickhue-insert-in {
+  from {
+    opacity: 0;
+    transform: scaleY(0.6);
+  }
 }
 
 .palette-editor__remove {
@@ -1210,6 +1353,44 @@ button {
 .palette-editor__remove .icon {
   display: block;
   flex-shrink: 0;
+}
+
+.palette-editor__ramp-btn {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  z-index: 2;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 1px solid var(--swatch-border);
+  border-radius: 50%;
+  background: var(--close-bg);
+  color: var(--text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease, background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.palette-editor__ramp-btn:hover {
+  background: var(--close-bg-hover);
+  border-color: var(--swatch-border-hover);
+}
+
+.palette-editor__ramp-btn .icon {
+  display: block;
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+}
+
+.palette-editor__swatch-item:hover .palette-editor__ramp-btn,
+.palette-editor__swatch-item:focus-within .palette-editor__ramp-btn {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .palette-editor__swatch-item:hover .palette-editor__remove,
@@ -1316,6 +1497,24 @@ button {
   border: 1px solid var(--control-border);
   background: var(--bg);
   color: var(--text);
+}
+
+/* Live parse feedback: accent = will add, danger = nothing parseable. */
+.palette-editor__paste-input.is-valid {
+  border-color: var(--accent);
+}
+
+.palette-editor__paste-input.is-invalid {
+  border-color: var(--danger);
+}
+
+.palette-editor__add-btn--icon {
+  width: 29px;
+  min-width: 29px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .palette-editor__actions {
@@ -1435,6 +1634,38 @@ button {
   font-size: 18px;
   line-height: 1.2;
   margin-left: 8px;
+}
+
+/* Same control language as the Format select: 29px, 2px border, track fill. */
+.panel__shortcut-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 29px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 2px solid var(--control-border);
+  background: var(--swatch-track);
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 500;
+  /* Trailing letter-space is balanced by an equal text-indent so the glyphs
+     sit optically centered. */
+  letter-spacing: 0.05em;
+  text-indent: 0.05em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.panel__shortcut-btn:hover,
+.panel__shortcut-btn:focus-visible {
+  color: var(--text);
+  outline: none;
+  border-color: color-mix(in srgb, var(--control-border) 70%, var(--text));
 }
 
 .panel__setting-actions {
@@ -1674,14 +1905,14 @@ button {
   bottom: calc(var(--footer-inset) * 2 + var(--cta-height) + 10px);
   width: max-content;
   max-width: calc(100% - 40px);
-  min-height: 48px;
-  padding: 10px 16px;
-  border-radius: 14px;
+  min-height: 0;
+  padding: 8px;
+  border-radius: 16px;
   background: rgba(20, 20, 20, 0.94);
   color: #f6f6f6;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.28);
   border: 1px solid rgba(255, 255, 255, 0.08);
   transform: translate(-50%, 12px);
@@ -1717,6 +1948,13 @@ button {
   display: none;
 }
 
+/* Text-only toasts (exports, errors): rounded rectangle that encases the text
+   rather than the swatch-concentric radius, which pills at text height. */
+.toast--text-only {
+  padding: 9px 14px;
+  border-radius: 12px;
+}
+
 .toast__swatch {
   width: 24px;
   height: 24px;
@@ -1730,10 +1968,130 @@ button {
 }
 
 .toast__text {
-  font-size: 14px;
+  padding-right: 4px;
+  font-size: 13px;
   font-weight: 500;
   line-height: 1.25;
   min-width: 0;
   text-align: left;
   overflow-wrap: anywhere;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel {
+    transform: none;
+    transition: opacity 0.18s ease, background-color 0.22s ease, color 0.22s ease;
+  }
+
+  .toast {
+    transform: translate(-50%, 0);
+    transition: opacity 0.22s ease;
+  }
+}
+
+/* Shades & tints overlay: Tailwind-scale ramp of a palette swatch. */
+.palette-editor__ramp-dialog {
+  width: 264px;
+}
+
+.palette-editor__ramp-base {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 2px 0 10px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+.palette-editor__ramp-base-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 5px;
+  border: 1px solid var(--swatch-border);
+  flex-shrink: 0;
+}
+
+.palette-editor__ramp-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 5px;
+  margin-bottom: 12px;
+}
+
+.palette-editor__ramp-cell {
+  position: relative;
+}
+
+.palette-editor__ramp-step {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 11px;
+  border: 1px solid var(--swatch-border);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.15s ease;
+}
+
+.palette-editor__ramp-step:hover {
+  border-color: var(--swatch-border-hover);
+}
+
+/* The step whose lightness matches the source color. */
+.palette-editor__ramp-step.is-base {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.palette-editor__ramp-step-label {
+  font-size: 8.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+.palette-editor__ramp-add {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  z-index: 2;
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  border: 1px solid var(--swatch-border);
+  border-radius: 50%;
+  background: var(--close-bg);
+  color: var(--text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease, background-color 0.15s ease;
+}
+
+.palette-editor__ramp-add .icon {
+  width: 8px;
+  height: 8px;
+}
+
+.palette-editor__ramp-cell:hover .palette-editor__ramp-add,
+.palette-editor__ramp-cell:focus-within .palette-editor__ramp-add {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.palette-editor__ramp-add:hover:not(:disabled) {
+  background: var(--close-bg-hover);
+}
+
+.palette-editor__ramp-add.is-added {
+  opacity: 1;
+  pointer-events: none;
+  background: var(--accent);
+  color: var(--accent-text);
+  border-color: transparent;
 }

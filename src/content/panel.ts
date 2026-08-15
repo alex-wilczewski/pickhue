@@ -1,5 +1,6 @@
 import panelCss from "./panel.css?inline";
-import { DELETE_BUTTON_HTML, DELETE_ICON_HTML, EXPORT_ICON_HTML, IMPORT_ICON_HTML, MOVE_ICON_HTML, REMOVE_SWATCH_ICON_HTML, RENAME_ICON_HTML, SETTINGS_ICON_HTML } from "./icons";
+import { CANCEL_ACTION_ICON_HTML, DELETE_BUTTON_HTML, DELETE_ICON_HTML, ELLIPSIS_ICON_HTML, EXPORT_BACKUP_ICON_HTML, EXPORT_CODE_ICON_HTML, EXPORT_FILE_ICON_HTML, EXPORT_ICON_HTML, EXPORT_LIST_ICON_HTML, IMPORT_ICON_HTML, MOVE_ICON_HTML, PLUS_ICON_HTML, REMOVE_SWATCH_ICON_HTML, RENAME_ICON_HTML } from "./icons";
+import { EXPORT_TAILWIND_ICON_HTML } from "./icons";
 import { PaletteEditorView } from "./palette-editor";
 import { dismissActiveMenu, showActionMenu, showSelectMenu } from "./palette-menu";
 import { SwatchTooltipController } from "./swatch-tooltip";
@@ -10,6 +11,7 @@ import {
   exportPalettesAseFile,
   exportPalettesCss,
   exportPalettesHexList,
+  exportPalettesTailwind,
   exportPaletteAseFile,
 } from "../shared/palette-formats";
 import { exportPalettes, importPalettes, importPalettesFromAse } from "../shared/palette-io";
@@ -25,6 +27,7 @@ import {
   saveSettings,
   StorageQuotaError,
 } from "../shared/storage";
+import { chromeTintTokens, deriveAccentTokens } from "../shared/accent";
 import { resolveTheme } from "../shared/theme";
 import type { ColorFormat, ColorPalette, Settings, ThemeMode } from "../shared/types";
 
@@ -104,9 +107,7 @@ const TEMPLATE = `
         <section class="panel__section panel__section--recent">
           <div class="panel__section-head">
             <h2 class="panel__label">Recent Colors</h2>
-            <button type="button" class="panel__section-action" data-ref="select-mode-toggle" hidden>
-              Save to palette
-            </button>
+            <button type="button" class="panel__section-action panel__section-action--icon" data-ref="select-mode-toggle" aria-label="Save to palette" hidden>${PLUS_ICON_HTML}</button>
           </div>
           <div class="panel__swatches-wrap">
             <button
@@ -167,6 +168,13 @@ const TEMPLATE = `
               <button type="button" class="panel__palette-btn panel__palette-btn--icon" aria-label="Export All" data-ref="export-palettes">${EXPORT_ICON_HTML}</button>
               <button type="button" class="panel__palette-btn panel__palette-btn--icon" aria-label="Import" data-ref="import-palettes">${IMPORT_ICON_HTML}</button>
             </div>
+          </div>
+
+          <div class="panel__setting">
+            <span class="panel__setting-label">Shortcut</span>
+            <button type="button" class="panel__shortcut-btn" data-ref="shortcut" aria-label="Change eyedropper shortcut">
+              <span data-ref="shortcut-value">Eyedropper</span>
+            </button>
           </div>
 
           <div class="panel__setting">
@@ -255,6 +263,7 @@ export class PanelController {
   private selectedPaletteId: string | null = null;
   private moveModePaletteId: string | null = null;
   private paletteDragIndex = -1;
+  private paletteInsertSlot = -1;
   private paletteDropHandled = false;
   private readonly selectedRecents = new Set<string>();
   private editor: PaletteEditorView | null = null;
@@ -779,12 +788,29 @@ export class PanelController {
       void this.openNewPalette();
     });
 
-    this.ref<HTMLButtonElement>("select-mode-toggle")?.addEventListener(
-      "click",
-      () => {
-        this.setSelectionMode(!this.selectionMode);
-      }
-    );
+    const shortcutBtn = this.ref<HTMLButtonElement>("shortcut");
+    shortcutBtn?.addEventListener("click", () => {
+      // chrome:// pages can't be opened from a content script — ask the worker.
+      void chrome.runtime.sendMessage({ type: "OPEN_SHORTCUTS" });
+    });
+    if (shortcutBtn) {
+      this.swatchTooltip?.attach(
+        shortcutBtn,
+        () => "Change in Chrome shortcut settings"
+      );
+    }
+    this.syncShortcutRow();
+
+    const selectModeToggle = this.ref<HTMLButtonElement>("select-mode-toggle");
+    selectModeToggle?.addEventListener("click", () => {
+      this.setSelectionMode(!this.selectionMode);
+    });
+    if (selectModeToggle) {
+      // Icon-only action: the label lives in the tooltip + aria-label.
+      this.swatchTooltip?.attach(selectModeToggle, () =>
+        this.selectionMode ? "Cancel" : "Save to palette"
+      );
+    }
 
     this.ref<HTMLButtonElement>("empty")?.addEventListener("click", () => {
       if (this.selectionMode || this.view !== "home") {
@@ -964,17 +990,35 @@ export class PanelController {
       row.classList.add("is-dragging");
     });
 
+    // Insertion-slot reorder: an accent bar marks the gap the row will land in
+    // (slot k = above row k; slot n = below the last row). Mirrors the editor's
+    // swatch-grid indicator.
+    const rowsOf = (): HTMLElement[] => [
+      ...list.querySelectorAll<HTMLElement>(".panel__palette-row"),
+    ];
+    const clearRowIndicator = (): void => {
+      for (const item of rowsOf()) {
+        item.classList.remove("is-insert-above", "is-insert-below");
+      }
+    };
+    const showRowIndicator = (slot: number): void => {
+      clearRowIndicator();
+      const rows = rowsOf();
+      if (slot < rows.length) {
+        rows[slot]?.classList.add("is-insert-above");
+      } else {
+        rows[rows.length - 1]?.classList.add("is-insert-below");
+      }
+    };
+
     list.addEventListener("dragend", (event) => {
       const row = (event.target as HTMLElement).closest<HTMLElement>(
         ".panel__palette-row"
       );
       row?.classList.remove("is-dragging");
-      for (const item of list.querySelectorAll<HTMLElement>(
-        ".panel__palette-row"
-      )) {
-        item.classList.remove("is-drop-target");
-      }
+      clearRowIndicator();
       this.paletteDragIndex = -1;
+      this.paletteInsertSlot = -1;
       if (!this.paletteDropHandled) {
         this.setMoveMode(null);
       }
@@ -988,53 +1032,49 @@ export class PanelController {
       const row = (event.target as HTMLElement).closest<HTMLElement>(
         ".panel__palette-row"
       );
-      if (!row || row.dataset.paletteId === this.moveModePaletteId) {
+      if (!row) {
         return;
       }
       event.preventDefault();
       if (event.dataTransfer) {
         event.dataTransfer.dropEffect = "move";
       }
-      for (const item of list.querySelectorAll<HTMLElement>(
-        ".panel__palette-row"
-      )) {
-        item.classList.remove("is-drop-target");
+      const rect = row.getBoundingClientRect();
+      const above = event.clientY < rect.top + rect.height / 2;
+      const slot = rowsOf().indexOf(row) + (above ? 0 : 1);
+      if (slot === this.paletteDragIndex || slot === this.paletteDragIndex + 1) {
+        this.paletteInsertSlot = -1;
+        clearRowIndicator();
+        return;
       }
-      row.classList.add("is-drop-target");
+      this.paletteInsertSlot = slot;
+      showRowIndicator(slot);
     });
 
     list.addEventListener("dragleave", (event) => {
-      const row = (event.target as HTMLElement).closest<HTMLElement>(
-        ".panel__palette-row"
-      );
-      if (!row) {
-        return;
-      }
       const related = event.relatedTarget as Node | null;
-      if (related && row.contains(related)) {
+      if (related && list.contains(related)) {
         return;
       }
-      row.classList.remove("is-drop-target");
+      clearRowIndicator();
+      this.paletteInsertSlot = -1;
     });
 
     list.addEventListener("drop", (event) => {
       if (!this.moveModePaletteId || this.paletteDragIndex < 0) {
         return;
       }
-      const row = (event.target as HTMLElement).closest<HTMLElement>(
-        ".panel__palette-row"
-      );
-      if (!row || row.dataset.paletteId === this.moveModePaletteId) {
+      event.preventDefault();
+      clearRowIndicator();
+      const slot = this.paletteInsertSlot;
+      this.paletteInsertSlot = -1;
+      if (slot < 0) {
         return;
       }
-      event.preventDefault();
-      row.classList.remove("is-drop-target");
-      const dropIndex = this.palettes.findIndex(
-        (palette) => palette.id === row.dataset.paletteId
-      );
-      if (dropIndex >= 0 && dropIndex !== this.paletteDragIndex) {
+      const to = slot > this.paletteDragIndex ? slot - 1 : slot;
+      if (to !== this.paletteDragIndex) {
         this.paletteDropHandled = true;
-        void this.reorderPalettesInList(this.paletteDragIndex, dropIndex);
+        void this.reorderPalettesInList(this.paletteDragIndex, to);
       }
     });
   }
@@ -1214,7 +1254,13 @@ export class PanelController {
     if (toggle) {
       toggle.hidden = !hasRecents;
       toggle.classList.toggle("is-active", this.selectionMode);
-      toggle.textContent = this.selectionMode ? "Cancel" : "Save to palette";
+      toggle.innerHTML = this.selectionMode
+        ? CANCEL_ACTION_ICON_HTML
+        : PLUS_ICON_HTML;
+      toggle.setAttribute(
+        "aria-label",
+        this.selectionMode ? "Cancel" : "Save to palette"
+      );
     }
   }
 
@@ -1646,7 +1692,7 @@ export class PanelController {
     menuBtn.type = "button";
     menuBtn.className = "panel__palette-btn panel__palette-menu-btn";
     menuBtn.setAttribute("aria-label", `Actions for ${palette.name}`);
-    menuBtn.innerHTML = SETTINGS_ICON_HTML;
+    menuBtn.innerHTML = ELLIPSIS_ICON_HTML;
     menuBtn.addEventListener("click", (event) => {
       event.stopPropagation();
       this.showPaletteRowMenu(menuBtn, palette);
@@ -1929,6 +1975,7 @@ export class PanelController {
     showActionMenu(this.getRoot(), anchor, [
       {
         label: "Hex list — Canva, anywhere",
+        iconHtml: EXPORT_LIST_ICON_HTML,
         action: () => {
           copyText(exportPalettesHexList(palettes));
           this.showToast("Hex list copied");
@@ -1936,13 +1983,23 @@ export class PanelController {
       },
       {
         label: "CSS variables — Figma, code",
+        iconHtml: EXPORT_CODE_ICON_HTML,
         action: () => {
           copyText(exportPalettesCss(palettes));
           this.showToast("CSS variables copied");
         },
       },
       {
+        label: "Tailwind config",
+        iconHtml: EXPORT_TAILWIND_ICON_HTML,
+        action: () => {
+          copyText(exportPalettesTailwind(palettes));
+          this.showToast("Tailwind colors copied");
+        },
+      },
+      {
         label: "Adobe ASE (.ase)",
+        iconHtml: EXPORT_FILE_ICON_HTML,
         action: () => {
           if (single) {
             exportPaletteAseFile(palettes[0]!);
@@ -1955,6 +2012,7 @@ export class PanelController {
       },
       {
         label: "PickHue JSON (backup)",
+        iconHtml: EXPORT_BACKUP_ICON_HTML,
         action: () => {
           copyText(exportPalettes(palettes));
           this.showToast("JSON copied to clipboard");
@@ -1963,12 +2021,53 @@ export class PanelController {
     ]);
   }
 
+  /** Shows the live eyedropper binding (users can remap it in Chrome). */
+  private syncShortcutRow(): void {
+    const value = this.ref<HTMLElement>("shortcut-value");
+    if (!value) {
+      return;
+    }
+    void chrome.runtime
+      .sendMessage({ type: "GET_PICKER_SHORTCUT" })
+      .then((response: { shortcut?: string } | undefined) => {
+        value.textContent = response?.shortcut
+          ? response.shortcut
+          : "Set shortcut";
+      })
+      .catch(() => {
+        value.textContent = "Set shortcut";
+      });
+  }
+
   private applyResolvedTheme(): void {
     const theme = resolveTheme(this.settings.themeMode);
     this.panelEl?.setAttribute("data-theme", theme);
 
     if (this.hostContext === "extension-page") {
       document.body.dataset.theme = theme;
+    }
+
+    this.applyDynamicAccent(theme);
+  }
+
+  /*
+   * Dynamic accent + tinted chrome: the panel wears the user's last pick.
+   * Inline vars override the static (default coral) values in panel.css.
+   */
+  private applyDynamicAccent(theme: "light" | "dark"): void {
+    if (!this.panelEl) {
+      return;
+    }
+    const pick = this.settings.recentColors[0] ?? null;
+    const tokens = deriveAccentTokens(pick, theme);
+    this.panelEl.style.setProperty("--accent", tokens.accent);
+    this.panelEl.style.setProperty("--accent-hover", tokens.accentHover);
+    this.panelEl.style.setProperty("--accent-text", tokens.accentText);
+    this.panelEl.style.setProperty("--accent-link", tokens.accentLink);
+    for (const [prop, value] of Object.entries(
+      chromeTintTokens(tokens.hue, theme)
+    )) {
+      this.panelEl.style.setProperty(prop, value);
     }
   }
 
@@ -2025,6 +2124,9 @@ export class PanelController {
     } else {
       swatch.hidden = true;
     }
+    // Swatchless toasts drop the swatch-concentric radius — at text height it
+    // reads as a pill instead of a rounded rectangle.
+    toast.classList.toggle("toast--text-only", !hex);
     text.textContent = message;
     toast.hidden = false;
     requestAnimationFrame(() => toast.classList.add("is-visible"));

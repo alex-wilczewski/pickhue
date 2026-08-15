@@ -4,3 +4,4 @@ pickhue-*.zip
 *.log
 .DS_Store
 figma-extension-design.png
+.claude/

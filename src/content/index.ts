@@ -80,6 +80,14 @@ if (!(globalThis as Record<string, unknown>)[LOADED_FLAG]) {
       return true;
     }
 
+    // Keyboard shortcut: straight into the eyedropper, no panel first.
+    if (message.type === "START_PICKER") {
+      pendingPaletteId = null;
+      void launchPicker();
+      sendResponse({ ok: true });
+      return true;
+    }
+
     return undefined;
   });
 }
