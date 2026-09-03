@@ -3,7 +3,7 @@ import { defineManifest } from "@crxjs/vite-plugin";
 export default defineManifest({
   manifest_version: 3,
   name: "PickHue",
-  version: "3.0.0",
+  version: "3.1.0",
   description: "An elegant color picker for your browser.",
   icons: {
     "16": "icons/icon-16.png",

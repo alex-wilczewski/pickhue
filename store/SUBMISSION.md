@@ -1,6 +1,6 @@
-# PickHue — Chrome Web Store submission guide (v3.0.0)
+# PickHue — Chrome Web Store submission guide (v3.1.0)
 
-Use this checklist when uploading **PickHue 3.0.0** to the [Developer Dashboard](https://chrome.google.com/webstore/devconsole).
+Use this checklist when uploading **PickHue 3.1.0** to the [Developer Dashboard](https://chrome.google.com/webstore/devconsole).
 
 > **Status:** 2.0.4 shipped clean after the 2.0.3 `tabs`-permission rejection (Purple Potassium). 3.0.0 keeps the same permission set — no new warnings, so existing users auto-update without a re-consent prompt.
 
@@ -8,7 +8,7 @@ Use this checklist when uploading **PickHue 3.0.0** to the [Developer Dashboard]
 
 ```bash
 npm install
-npm run package          # builds dist/ and creates pickhue-3.0.0.zip
+npm run package          # builds dist/ and creates pickhue-3.1.0.zip
 npm run typecheck        # optional sanity check
 ```
 
@@ -56,6 +56,17 @@ Nothing on the **Privacy practices** tab needs to change: no remote code, no ana
 - [ ] `prefers-reduced-motion` enabled — animations degrade, nothing breaks
 - [ ] Import / export of existing palettes still works after upgrading from 2.0.4
 
+### Additional QA for 3.1.0
+
+- [ ] Right-click a swatch (recents + editor) shows the copy-as menu with live values in all 7 formats
+- [ ] `S` while picking cycles 1×1 / 3×3 / 5×5; the reticle grows and the badge reads e.g. "3×3 · 120%"
+- [ ] Color Card: sliders tune live, ramp steps stage/unstage, Add commits staged + tuned in one write
+- [ ] Color Card: Contrast is collapsed by default and expands without touching the action buttons
+- [ ] Replace swaps the color in place and closes; × / Esc / outside-click cancel without writing
+- [ ] Sparkle action extracts this page's palette grouped by role; excluded swatches don't save
+- [ ] Clear Recent Colors appears on hover, clears, and Undo restores the exact list
+- [ ] Loupe clips at all four screen edges; the value chip stays fully on-screen
+
 ## Required URLs
 
 | Field | Value |
@@ -77,8 +88,8 @@ Because 3.0.0 is a major redesign, it *is* worth refreshing the listing this tim
 
 ## Submit (update existing listing)
 
-1. Dashboard → your **PickHue** item → **Package** → upload `pickhue-3.0.0.zip`
-2. Confirm the draft package shows version **3.0.0**
+1. Dashboard → your **PickHue** item → **Package** → upload `pickhue-3.1.0.zip`
+2. Confirm the draft package shows version **3.1.0**
 3. Confirm privacy policy URL is current
 4. On the permissions review screen, confirm `tabs` is **not** listed and the set still reads storage / activeTab / scripting + `<all_urls>`
 5. Optionally refresh Store listing description and screenshots (see above)
@@ -86,6 +97,6 @@ Because 3.0.0 is a major redesign, it *is* worth refreshing the listing this tim
 
 ## After approval
 
-- Confirm Web Store users receive 3.0.0 and the what's-new tab fires once on upgrade
+- Confirm Web Store users receive 3.1.0 and the what's-new tab fires once on upgrade (previous major < 3)
 - Verify https://pickhue.site/whats-new and /goodbye are live before the rollout reaches users
 - Optionally note the update on https://pickhue.site / GitHub release comments

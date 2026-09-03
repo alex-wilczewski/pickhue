@@ -2,6 +2,20 @@
 
 All notable changes to PickHue are documented here.
 
+## [3.1.0] — 2026-09-03
+
+**Pro tools release.** The UX-audit round: a Color Card for every palette color, WCAG contrast checking, page-palette extraction, area-average sampling, and four new color formats.
+
+- **Color Card** — every palette swatch opens a card with OKLCH tune sliders (gradient tracks, a thumb that wears the current color), the 10-step shades & tints ramp, and actions. Ramp steps **stage** on tap (recents-style ring) and commit together with your tuned color via a single **Add** — nothing writes until you say so
+- **Contrast checker** — a collapsed-by-default section of the Color Card: WCAG ratios with AAA / AA / AA·L grades against white, black, and every other color in the palette, updating live as you tune
+- **Palette from this page** — the sparkle action in Saved Palettes gathers the page's colors grouped by role (backgrounds, text, borders), with near-duplicates merged perceptually; toggle what to keep, name it, save
+- **Area-average sampling** — press `S` while picking to cycle 1×1 / 3×3 / 5×5 averaging; the reticle grows to cover exactly the sampled pixels
+- **Copy as anything** — right-click any swatch for a menu of live values: HEX, RGB, HSL, OKLCH, and the new **LCH, OKLAB, HWB** (also available as the global format)
+- **Clear recent colors** — a hover-revealed action in the Recent Colors header; undoable via the toast, no confirm dialog
+- Eyedropper opens instantly — the screen capture now races the overlay instead of blocking it
+- The loupe clips at screen edges like a physical lens, keeping the reticle on the exact edge pixel while the value chip stays readable
+- Editor swatch badges are easier to hit; panel height no longer shifts when recents empty out
+
 ## [3.0.0] — 2026-08-15
 
 **Dynamic accent release.** PickHue now wears your colors: the whole UI derives its accent from your last pick, plus a full UX overhaul of the picker, toasts, and palette editor.
