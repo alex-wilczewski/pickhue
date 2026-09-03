@@ -122,6 +122,72 @@ export function rgbToOklch({ r, g, b }: Rgb): Oklch {
   };
 }
 
+export interface Oklab {
+  l: number;
+  a: number;
+  b: number;
+}
+
+export function rgbToOklab({ r, g, b }: Rgb): Oklab {
+  const lr = srgbToLinear(r);
+  const lg = srgbToLinear(g);
+  const lb = srgbToLinear(b);
+  const l = Math.cbrt(0.4122214708 * lr + 0.5363325363 * lg + 0.0514459929 * lb);
+  const m = Math.cbrt(0.2119034982 * lr + 0.6806995451 * lg + 0.1073969566 * lb);
+  const s = Math.cbrt(0.0883024619 * lr + 0.2817188376 * lg + 0.6299787005 * lb);
+  return {
+    l: (0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s) * 100,
+    a: 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s,
+    b: 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s,
+  };
+}
+
+/** CIELAB (D65) — the classic Lab behind CSS lch(). */
+export function rgbToLch({ r, g, b }: Rgb): { l: number; c: number; h: number } {
+  const lr = srgbToLinear(r);
+  const lg = srgbToLinear(g);
+  const lb = srgbToLinear(b);
+  const x = (0.4124564 * lr + 0.3575761 * lg + 0.1804375 * lb) / 0.95047;
+  const y = 0.2126729 * lr + 0.7151522 * lg + 0.072175 * lb;
+  const z = (0.0193339 * lr + 0.119192 * lg + 0.9503041 * lb) / 1.08883;
+  const f = (t: number): number =>
+    t > 216 / 24389 ? Math.cbrt(t) : ((24389 / 27) * t + 16) / 116;
+  const fx = f(x);
+  const fy = f(y);
+  const fz = f(z);
+  const L = 116 * fy - 16;
+  const a = 500 * (fx - fy);
+  const bb = 200 * (fy - fz);
+  const c = Math.hypot(a, bb);
+  let h = (Math.atan2(bb, a) * 180) / Math.PI;
+  if (h < 0) {
+    h += 360;
+  }
+  return { l: L, c, h: c < 0.01 ? 0 : h };
+}
+
+export function rgbToHwb(rgb: Rgb): { h: number; w: number; b: number } {
+  const { h } = rgbToHsl(rgb);
+  const max = Math.max(rgb.r, rgb.g, rgb.b);
+  const min = Math.min(rgb.r, rgb.g, rgb.b);
+  return {
+    h,
+    w: Math.round((min / 255) * 100),
+    b: Math.round((1 - max / 255) * 100),
+  };
+}
+
+/** UI list for the format dropdown and copy-as menus. */
+export const COLOR_FORMATS: { value: ColorFormat; label: string }[] = [
+  { value: "hex", label: "HEX" },
+  { value: "rgb", label: "RGB" },
+  { value: "hsl", label: "HSL" },
+  { value: "oklch", label: "OKLCH" },
+  { value: "lch", label: "LCH" },
+  { value: "oklab", label: "OKLAB" },
+  { value: "hwb", label: "HWB" },
+];
+
 export function formatColor(hex: string, format: ColorFormat): string {
   const normalized = normalizeHex(hex);
   const rgb = parseHex(normalized);
@@ -138,6 +204,18 @@ export function formatColor(hex: string, format: ColorFormat): string {
     case "oklch": {
       const { l, c, h } = rgbToOklch(rgb);
       return `${l.toFixed(1)}% ${c.toFixed(3)} ${h.toFixed(1)}`;
+    }
+    case "lch": {
+      const { l, c, h } = rgbToLch(rgb);
+      return `${l.toFixed(1)}% ${c.toFixed(1)} ${h.toFixed(1)}`;
+    }
+    case "oklab": {
+      const { l, a, b } = rgbToOklab(rgb);
+      return `${l.toFixed(1)}% ${a.toFixed(3)} ${b.toFixed(3)}`;
+    }
+    case "hwb": {
+      const { h, w, b } = rgbToHwb(rgb);
+      return `${h} ${w}% ${b}%`;
     }
   }
 }

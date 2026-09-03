@@ -89,7 +89,7 @@ function oklabToRgb(
   ];
 }
 
-function hexToOklch(hex: string): { L: number; C: number; h: number } {
+export function hexToOklch(hex: string): { L: number; C: number; h: number } {
   const [L, a, b] = rgbToOklab(...hexToRgb(hex));
   return { L, C: Math.hypot(a, b), h: (Math.atan2(b, a) * 180) / Math.PI };
 }
@@ -101,7 +101,7 @@ function inGamut(r: number, g: number, b: number): boolean {
 }
 
 /** OKLCH -> hex, reducing chroma until inside the sRGB gamut. */
-function oklchToHex(L: number, C: number, h: number): string {
+export function oklchToHex(L: number, C: number, h: number): string {
   const rad = (h * Math.PI) / 180;
   let lo = 0;
   let hi = C;
@@ -122,7 +122,7 @@ function oklchToHex(L: number, C: number, h: number): string {
 }
 
 /** Max chroma the sRGB gamut allows at a given OKLCH lightness/hue. */
-function maxChromaAt(L: number, h: number): number {
+export function maxChromaAt(L: number, h: number): number {
   const rad = (h * Math.PI) / 180;
   let lo = 0;
   let hi = 0.4;
@@ -173,7 +173,7 @@ function relativeLuminance(hex: string): number {
   return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
 }
 
-function contrastRatio(a: string, b: string): number {
+export function contrastRatio(a: string, b: string): number {
   const la = relativeLuminance(a);
   const lb = relativeLuminance(b);
   const [l1, l2] = la > lb ? [la, lb] : [lb, la];

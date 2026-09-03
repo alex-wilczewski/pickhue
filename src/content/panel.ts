@@ -1,12 +1,13 @@
 import panelCss from "./panel.css?inline";
-import { CANCEL_ACTION_ICON_HTML, DELETE_BUTTON_HTML, DELETE_ICON_HTML, ELLIPSIS_ICON_HTML, EXPORT_BACKUP_ICON_HTML, EXPORT_CODE_ICON_HTML, EXPORT_FILE_ICON_HTML, EXPORT_ICON_HTML, EXPORT_LIST_ICON_HTML, IMPORT_ICON_HTML, MOVE_ICON_HTML, PLUS_ICON_HTML, REMOVE_SWATCH_ICON_HTML, RENAME_ICON_HTML } from "./icons";
+import { CANCEL_ACTION_ICON_HTML, DELETE_BUTTON_HTML, DELETE_ICON_HTML, ELLIPSIS_ICON_HTML, EXPORT_BACKUP_ICON_HTML, EXPORT_CODE_ICON_HTML, EXPORT_FILE_ICON_HTML, EXPORT_ICON_HTML, EXPORT_LIST_ICON_HTML, IMPORT_ICON_HTML, MOVE_ICON_HTML, PLUS_ICON_HTML, REMOVE_SWATCH_ICON_HTML, RENAME_ICON_HTML, SPARKLE_ICON_HTML } from "./icons";
 import { EXPORT_TAILWIND_ICON_HTML } from "./icons";
+import { extractPagePalette } from "./extract";
 import { PaletteEditorView } from "./palette-editor";
 import { dismissActiveMenu, showActionMenu, showSelectMenu } from "./palette-menu";
 import { SwatchTooltipController } from "./swatch-tooltip";
 import { bindSwatchTrack, syncTrackOverflow } from "./swatch-track";
 import { copyText } from "../shared/clipboard";
-import { formatColor } from "../shared/colors";
+import { COLOR_FORMATS, formatColor } from "../shared/colors";
 import {
   exportPalettesAseFile,
   exportPalettesCss,
@@ -36,12 +37,7 @@ const PANEL_STYLES_ID = "pickhue-panel-styles";
 const CLOSE_ANIM_MS = 180;
 const PALETTE_PREVIEW_COUNT = 4;
 
-const FORMAT_OPTIONS: { value: ColorFormat; label: string }[] = [
-  { value: "hex", label: "HEX" },
-  { value: "rgb", label: "RGB" },
-  { value: "hsl", label: "HSL" },
-  { value: "oklch", label: "OKLCH" },
-];
+const FORMAT_OPTIONS = COLOR_FORMATS;
 
 function formatLabel(format: ColorFormat): string {
   return FORMAT_OPTIONS.find((option) => option.value === format)?.label ?? "HEX";
@@ -107,7 +103,10 @@ const TEMPLATE = `
         <section class="panel__section panel__section--recent">
           <div class="panel__section-head">
             <h2 class="panel__label">Recent Colors</h2>
-            <button type="button" class="panel__section-action panel__section-action--icon" data-ref="select-mode-toggle" aria-label="Save to palette" hidden>${PLUS_ICON_HTML}</button>
+            <span class="panel__section-actions">
+              <button type="button" class="panel__section-action panel__section-action--icon panel__section-action--clear" data-ref="clear-recents" aria-label="Clear recent colors" hidden>${DELETE_ICON_HTML}</button>
+              <button type="button" class="panel__section-action panel__section-action--icon" data-ref="select-mode-toggle" aria-label="Save to palette" hidden>${PLUS_ICON_HTML}</button>
+            </span>
           </div>
           <div class="panel__swatches-wrap">
             <button
@@ -127,9 +126,12 @@ const TEMPLATE = `
         <section class="panel__section panel__section--palettes">
           <div class="panel__section-head">
             <h2 class="panel__label">Saved Palettes</h2>
-            <button type="button" class="panel__section-action" data-ref="new-palette">
-              New palette
-            </button>
+            <span class="panel__section-actions">
+              <button type="button" class="panel__section-action panel__section-action--icon" data-ref="extract-page" aria-label="New palette from this page">${SPARKLE_ICON_HTML}</button>
+              <button type="button" class="panel__section-action" data-ref="new-palette">
+                New palette
+              </button>
+            </span>
           </div>
           <div class="panel__palettes-wrap" data-ref="palette-list-wrap">
             <div class="panel__palettes" data-ref="palette-list"></div>
@@ -224,9 +226,23 @@ const TEMPLATE = `
       </div>
     </div>
 
+    <div class="panel__import panel__extract" data-ref="extract-dialog" hidden>
+      <div class="panel__import-dialog" role="dialog" aria-label="Palette from this page">
+        <p class="panel__import-title">Palette from this page</p>
+        <p class="panel__import-hint" data-ref="extract-hint">Tap a swatch to leave it out.</p>
+        <div class="panel__extract-groups" data-ref="extract-groups"></div>
+        <input type="text" class="panel__extract-name" data-ref="extract-name" maxlength="48" placeholder="Palette name" aria-label="Palette name">
+        <div class="panel__import-actions">
+          <button type="button" class="panel__modal-btn" data-ref="extract-cancel">Cancel</button>
+          <button type="button" class="panel__modal-btn panel__modal-btn--accent" data-ref="extract-save">Save palette</button>
+        </div>
+      </div>
+    </div>
+
     <div class="toast" role="status" aria-live="polite" data-ref="toast" hidden>
       <span class="toast__swatch" data-ref="toast-swatch"></span>
       <span class="toast__text" data-ref="toast-text">Copied</span>
+      <button type="button" class="toast__action" data-ref="toast-action" hidden></button>
     </div>
   </div>
 `;
@@ -251,6 +267,7 @@ export class PanelController {
   private formatMenuDismiss: (() => void) | null = null;
   private closeTimer = 0;
   private toastTimer = 0;
+  private toastAction: (() => void) | null = null;
   private settings: Settings = {
     themeMode: "system",
     colorFormat: "hex",
@@ -329,6 +346,12 @@ export class PanelController {
       event.preventDefault();
       event.stopPropagation();
       this.hideImportDialog();
+      return;
+    }
+    if (this.ref<HTMLElement>("extract-dialog")?.hidden === false) {
+      event.preventDefault();
+      event.stopPropagation();
+      this.hideExtractDialog();
       return;
     }
     const saveConfirm = this.getRoot().querySelector(
@@ -801,6 +824,39 @@ export class PanelController {
     }
     this.syncShortcutRow();
 
+    const extractBtn = this.ref<HTMLButtonElement>("extract-page");
+    extractBtn?.addEventListener("click", () => {
+      this.showExtractDialog();
+    });
+    if (extractBtn) {
+      this.swatchTooltip?.attach(extractBtn, () => "New palette from this page");
+    }
+    this.ref<HTMLButtonElement>("extract-cancel")?.addEventListener("click", () => {
+      this.hideExtractDialog();
+    });
+    this.ref<HTMLButtonElement>("extract-save")?.addEventListener("click", () => {
+      void this.saveExtractedPalette();
+    });
+    this.ref<HTMLInputElement>("extract-name")?.addEventListener("keydown", (event) => {
+      event.stopPropagation();
+      if (event.key === "Enter") {
+        event.preventDefault();
+        void this.saveExtractedPalette();
+      }
+    });
+
+    const clearRecentsBtn = this.ref<HTMLButtonElement>("clear-recents");
+    clearRecentsBtn?.addEventListener("click", () => {
+      void this.handleClearRecents();
+    });
+    if (clearRecentsBtn) {
+      this.swatchTooltip?.attach(clearRecentsBtn, () => "Clear recent colors");
+    }
+
+    this.ref<HTMLButtonElement>("toast-action")?.addEventListener("click", () => {
+      this.toastAction?.();
+    });
+
     const selectModeToggle = this.ref<HTMLButtonElement>("select-mode-toggle");
     selectModeToggle?.addEventListener("click", () => {
       this.setSelectionMode(!this.selectionMode);
@@ -1262,6 +1318,11 @@ export class PanelController {
         this.selectionMode ? "Cancel" : "Save to palette"
       );
     }
+
+    const clear = this.ref<HTMLButtonElement>("clear-recents");
+    if (clear) {
+      clear.hidden = !hasRecents || this.selectionMode;
+    }
   }
 
   private updateFooterCta(): void {
@@ -1516,6 +1577,15 @@ export class PanelController {
             return;
           }
           void this.handleSwatchClick(hex);
+        });
+        // Right-click: copy in any format without touching the global setting.
+        button.addEventListener("contextmenu", (event) => {
+          if (this.selectionMode) {
+            return;
+          }
+          event.preventDefault();
+          this.swatchTooltip?.hide();
+          this.showCopyAsMenu(button, hex);
         });
 
         item.append(button);
@@ -2110,7 +2180,174 @@ export class PanelController {
     this.showToast(`Copied ${formatted}`, hex);
   }
 
-  showToast(message: string, hex?: string): void {
+  /*
+   * Clear-all is undoable rather than confirmed: the toast offers Undo for a
+   * few seconds and restores the exact list (and with it, the dynamic accent).
+   */
+  private async handleClearRecents(): Promise<void> {
+    if (this.settings.recentColors.length === 0) {
+      return;
+    }
+    this.swatchTooltip?.hide();
+    const snapshot = [...this.settings.recentColors];
+    try {
+      this.settings = await saveSettings({ recentColors: [] });
+    } catch (error) {
+      this.handleStorageError(error);
+      return;
+    }
+    this.selectedRecents.clear();
+    this.renderRecentColors();
+    this.syncPaletteListState();
+    this.updateFooterCta();
+    this.applyResolvedTheme();
+    this.scheduleHostSize();
+    this.showToast(
+      "Recent colors cleared",
+      undefined,
+      { label: "Undo", onClick: () => void this.restoreRecents(snapshot) },
+      5000
+    );
+  }
+
+  private async restoreRecents(snapshot: string[]): Promise<void> {
+    try {
+      this.settings = await saveSettings({ recentColors: snapshot });
+    } catch (error) {
+      this.handleStorageError(error);
+      return;
+    }
+    this.renderRecentColors();
+    this.syncPaletteListState();
+    this.updateFooterCta();
+    this.applyResolvedTheme();
+    this.scheduleHostSize();
+    this.hideToast();
+  }
+
+  /*
+   * Extraction review: the page's colors grouped by role, every swatch a
+   * toggle (on by default), a prefilled name, one Save. Runs on demand — the
+   * DOM walk is capped and takes a few milliseconds.
+   */
+  private showExtractDialog(): void {
+    const dialog = this.ref<HTMLElement>("extract-dialog");
+    const groupsEl = this.ref<HTMLElement>("extract-groups");
+    const nameInput = this.ref<HTMLInputElement>("extract-name");
+    const hint = this.ref<HTMLElement>("extract-hint");
+    const saveBtn = this.ref<HTMLButtonElement>("extract-save");
+    if (!dialog || !groupsEl || !nameInput || !hint || !saveBtn) {
+      return;
+    }
+
+    const extracted = extractPagePalette();
+    const groups: Array<{ label: string; colors: string[] }> = [
+      { label: "Backgrounds", colors: extracted.backgrounds },
+      { label: "Text", colors: extracted.text },
+      { label: "Borders", colors: extracted.borders },
+    ].filter((group) => group.colors.length > 0);
+
+    groupsEl.replaceChildren();
+    const empty = groups.length === 0;
+    hint.textContent = empty
+      ? "No colors found on this page."
+      : "Tap a swatch to leave it out.";
+    saveBtn.disabled = empty;
+
+    for (const group of groups) {
+      const label = document.createElement("p");
+      label.className = "panel__extract-group-label";
+      label.textContent = group.label;
+      const row = document.createElement("div");
+      row.className = "panel__extract-row";
+      for (const hex of group.colors) {
+        const swatch = document.createElement("button");
+        swatch.type = "button";
+        swatch.className = "swatch panel__extract-swatch";
+        swatch.style.backgroundColor = hex;
+        swatch.dataset.hex = hex;
+        swatch.setAttribute("aria-pressed", "true");
+        swatch.setAttribute(
+          "aria-label",
+          `Include ${formatColor(hex, this.settings.colorFormat)}`
+        );
+        swatch.addEventListener("click", () => {
+          const excluded = swatch.classList.toggle("is-excluded");
+          swatch.setAttribute("aria-pressed", excluded ? "false" : "true");
+        });
+        this.swatchTooltip?.attach(swatch, () =>
+          formatColor(hex, this.settings.colorFormat)
+        );
+        row.append(swatch);
+      }
+      groupsEl.append(label, row);
+    }
+
+    nameInput.value = (document.title || "").trim().slice(0, 48) || "Page palette";
+    dialog.hidden = false;
+    this.scheduleHostSize();
+  }
+
+  private hideExtractDialog(): void {
+    const dialog = this.ref<HTMLElement>("extract-dialog");
+    if (dialog) {
+      dialog.hidden = true;
+    }
+  }
+
+  private async saveExtractedPalette(): Promise<void> {
+    const groupsEl = this.ref<HTMLElement>("extract-groups");
+    const nameInput = this.ref<HTMLInputElement>("extract-name");
+    if (!groupsEl || !nameInput) {
+      return;
+    }
+    const colors = [
+      ...new Set(
+        [...groupsEl.querySelectorAll<HTMLElement>(
+          ".panel__extract-swatch:not(.is-excluded)"
+        )].map((swatch) => swatch.dataset.hex ?? "")
+      ),
+    ].filter(Boolean);
+    if (colors.length === 0) {
+      this.showToast("No colors selected");
+      return;
+    }
+    const name = nameInput.value.trim().slice(0, 48) || "Page palette";
+    try {
+      await createPalette(name, colors);
+    } catch (error) {
+      this.handleStorageError(error);
+      return;
+    }
+    this.hideExtractDialog();
+    this.palettes = await getPalettes();
+    this.renderPalettes();
+    this.scheduleHostSize();
+    this.showToast(`Saved ${name}`);
+  }
+
+  /** Format-conversion menu: every format with its live value, one click copies. */
+  private showCopyAsMenu(anchor: HTMLElement, hex: string): void {
+    showActionMenu(
+      this.getRoot() as Document | ShadowRoot,
+      anchor,
+      FORMAT_OPTIONS.map((option) => ({
+        label: `${option.label} · ${formatColor(hex, option.value)}`,
+        action: () => {
+          const formatted = formatColor(hex, option.value);
+          copyText(formatted);
+          this.showToast(`Copied ${formatted}`, hex);
+        },
+      }))
+    );
+  }
+
+  showToast(
+    message: string,
+    hex?: string,
+    action?: { label: string; onClick: () => void },
+    durationMs = 2200
+  ): void {
     const toast = this.ref<HTMLElement>("toast");
     const swatch = this.ref<HTMLElement>("toast-swatch");
     const text = this.ref<HTMLElement>("toast-text");
@@ -2128,18 +2365,36 @@ export class PanelController {
     // reads as a pill instead of a rounded rectangle.
     toast.classList.toggle("toast--text-only", !hex);
     text.textContent = message;
+
+    const actionBtn = this.ref<HTMLButtonElement>("toast-action");
+    this.toastAction = action?.onClick ?? null;
+    if (actionBtn) {
+      actionBtn.hidden = !action;
+      actionBtn.textContent = action?.label ?? "";
+    }
+    // The toast is click-through unless it carries an action.
+    toast.classList.toggle("toast--actionable", Boolean(action));
+
     toast.hidden = false;
     requestAnimationFrame(() => toast.classList.add("is-visible"));
 
     if (this.toastTimer) {
       window.clearTimeout(this.toastTimer);
     }
-    this.toastTimer = window.setTimeout(() => {
-      toast.classList.remove("is-visible");
-      window.setTimeout(() => {
-        toast.hidden = true;
-      }, 220);
-    }, 2200);
+    this.toastTimer = window.setTimeout(() => this.hideToast(), durationMs);
+  }
+
+  private hideToast(): void {
+    const toast = this.ref<HTMLElement>("toast");
+    if (!toast) {
+      return;
+    }
+    window.clearTimeout(this.toastTimer);
+    this.toastAction = null;
+    toast.classList.remove("is-visible");
+    window.setTimeout(() => {
+      toast.hidden = true;
+    }, 220);
   }
 
   private handleStorageError(error: unknown): void {
