@@ -31,6 +31,8 @@ const ZOOM_MIN = 0.4;
 const ZOOM_MAX = 1.75;
 const ZOOM_DEFAULT = 1;
 const ZOOM_STEP = 0.1;
+/** S cycles through these sample sizes (NxN screen-pixel average). */
+const SAMPLE_SIZES = [1, 3, 5] as const;
 const SCROLL_SETTLE_MS = 150;
 /** If DOM and bitmap disagree beyond this, trust the rendered pixel. */
 const DOM_BITMAP_MAX_DISTANCE_SQ = 55 * 55;
@@ -81,6 +83,9 @@ export class EyedropperOverlay {
   private colorFormat: ColorFormat = "hex";
   private uiTheme: "light" | "dark" = "dark";
   private zoom = ZOOM_DEFAULT;
+  private sampleSize: number = SAMPLE_SIZES[0];
+  private reticleEl: HTMLDivElement | null = null;
+  private infoEl: HTMLDivElement | null = null;
   private lastPickedHex: string | null = null;
   private hint: HTMLParagraphElement | null = null;
   private glassEl: HTMLDivElement | null = null;
@@ -134,6 +139,16 @@ export class EyedropperOverlay {
       return;
     }
 
+    if (event.key === "s" || event.key === "S") {
+      event.preventDefault();
+      event.stopPropagation();
+      const index = SAMPLE_SIZES.indexOf(this.sampleSize as 1 | 3 | 5);
+      this.sampleSize = SAMPLE_SIZES[(index + 1) % SAMPLE_SIZES.length]!;
+      this.updateZoomBadge();
+      this.updateReticleSize();
+      return;
+    }
+
     if (event.key === "Enter" && this.hasPointer) {
       event.preventDefault();
       event.stopPropagation();
@@ -181,15 +196,35 @@ export class EyedropperOverlay {
     }
     this.zoom = next;
     this.updateZoomBadge();
+    this.updateReticleSize();
   }
 
+  /* One status badge carries both non-default states: "3×3 · 120%". */
   private updateZoomBadge(): void {
     if (!this.zoomBadge) {
       return;
     }
+    const parts: string[] = [];
+    if (this.sampleSize > 1) {
+      parts.push(`${this.sampleSize}×${this.sampleSize}`);
+    }
     const pct = Math.round(this.zoom * 100);
-    this.zoomBadge.textContent = `${pct}%`;
-    this.zoomBadge.classList.toggle("is-visible", pct !== 100);
+    if (pct !== 100) {
+      parts.push(`${pct}%`);
+    }
+    this.zoomBadge.textContent = parts.join(" · ");
+    this.zoomBadge.classList.toggle("is-visible", parts.length > 0);
+  }
+
+  /** The reticle grows to cover exactly the pixels being averaged. */
+  private updateReticleSize(): void {
+    if (!this.reticleEl) {
+      return;
+    }
+    const cell = (LOUPE_SIZE / SAMPLE) * this.zoom;
+    const size = Math.min(LOUPE_SIZE, cell * this.sampleSize);
+    this.reticleEl.style.width = `${size}px`;
+    this.reticleEl.style.height = `${size}px`;
   }
 
   private onScroll = (): void => {
@@ -211,22 +246,22 @@ export class EyedropperOverlay {
       return;
     }
 
+    // Fire the capture immediately and mount the overlay while it's in
+    // flight — the cursor swap and hint appear instantly instead of waiting
+    // out the screenshot round-trip; the loupe fades in when pixels arrive.
+    const capturePromise = chrome.runtime.sendMessage({
+      type: "CAPTURE_TAB",
+    }) as Promise<CaptureResponse>;
+
     const settings = await getSettings();
     this.colorFormat = settings.colorFormat;
     this.uiTheme = resolveTheme(settings.themeMode);
     this.accentPick = settings.recentColors[0] ?? null;
 
-    const response = (await chrome.runtime.sendMessage({
-      type: "CAPTURE_TAB",
-    })) as CaptureResponse;
-
-    if (!(await this.applyCapture(response))) {
-      return;
-    }
-
     this.active = true;
     this.hasPointer = false;
     this.zoom = ZOOM_DEFAULT;
+    this.sampleSize = SAMPLE_SIZES[0];
     this.mount();
     this.attachThemeListener();
     document.addEventListener("keydown", this.onKeyDown, true);
@@ -240,6 +275,10 @@ export class EyedropperOverlay {
     window.visualViewport?.addEventListener("scroll", this.onScroll, {
       passive: true,
     });
+
+    if (!(await this.applyCapture(await capturePromise))) {
+      this.stop("cancel");
+    }
   }
 
   private attachThemeListener(): void {
@@ -442,6 +481,7 @@ export class EyedropperOverlay {
 
     const reticle = document.createElement("div");
     reticle.className = "pickhue-loupe__reticle";
+    this.reticleEl = reticle;
 
     this.zoomBadge = document.createElement("span");
     this.zoomBadge.className = "pickhue-loupe__zoom";
@@ -451,6 +491,7 @@ export class EyedropperOverlay {
 
     const info = document.createElement("div");
     info.className = "pickhue-loupe__info";
+    this.infoEl = info;
 
     this.swatchDot = document.createElement("span");
     this.swatchDot.className = "pickhue-loupe__dot";
@@ -471,6 +512,7 @@ export class EyedropperOverlay {
     this.root.append(this.loupe, this.hint);
     this.applyOverlayAccents();
     this.updateZoomBadge();
+    this.updateReticleSize();
     document.documentElement.append(this.root);
     syncToastAboveHint();
 
@@ -501,41 +543,41 @@ export class EyedropperOverlay {
       return;
     }
 
-    if (!this.hasPointer) {
+    if (!this.hasPointer || !this.ctx) {
       this.loupe.style.opacity = "0";
       return;
     }
 
     // Center the loupe glass on the pointer so the magnified center pixel is
-    // exactly the pixel that will be picked (cursor is hidden via CSS).
+    // exactly the pixel that will be picked (cursor is hidden via CSS). The
+    // glass is NOT clamped to the viewport — at the edges it clips like a
+    // physical lens, keeping the reticle on the exact edge pixel.
     const viewportWidth = window.visualViewport?.width ?? window.innerWidth;
-    const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
     const viewportLeft = window.visualViewport?.offsetLeft ?? 0;
     const viewportTop = window.visualViewport?.offsetTop ?? 0;
 
-    let tx = Math.round(this.pointerX - LOUPE_SIZE / 2);
-    let ty = Math.round(this.pointerY - LOUPE_SIZE / 2);
-
-    const minX = Math.round(viewportLeft + LOUPE_EDGE_PAD);
-    const maxX = Math.round(
-      viewportLeft + viewportWidth - LOUPE_SIZE - LOUPE_EDGE_PAD
-    );
-    const minY = Math.round(viewportTop + LOUPE_EDGE_PAD);
-    const maxY = Math.round(
-      viewportTop + viewportHeight - LOUPE_SIZE - LOUPE_EDGE_PAD
-    );
-    if (maxX >= minX) {
-      tx = Math.min(maxX, Math.max(minX, tx));
-    }
-    if (maxY >= minY) {
-      ty = Math.min(maxY, Math.max(minY, ty));
-    }
+    const tx = Math.round(this.pointerX - LOUPE_SIZE / 2);
+    const ty = Math.round(this.pointerY - LOUPE_SIZE / 2);
 
     // Prefer the color chip above the loupe; flip below when near the top.
     const spaceAbove = ty - viewportTop;
     const needsBelow =
       spaceAbove < LOUPE_INFO_HEIGHT + LOUPE_INFO_GAP + LOUPE_EDGE_PAD;
     this.loupe.classList.toggle("is-info-below", needsBelow);
+
+    // The chip carries the value, so it alone stays inside the viewport:
+    // shift it horizontally off-center as the glass clips at the sides.
+    if (this.infoEl) {
+      const chipWidth = this.infoEl.offsetWidth;
+      const center = tx + LOUPE_SIZE / 2;
+      const minCenter = viewportLeft + chipWidth / 2 + LOUPE_EDGE_PAD;
+      const maxCenter =
+        viewportLeft + viewportWidth - chipWidth / 2 - LOUPE_EDGE_PAD;
+      const shift =
+        Math.min(Math.max(center, minCenter), Math.max(minCenter, maxCenter)) -
+        center;
+      this.infoEl.style.transform = `translateX(calc(-50% + ${Math.round(shift)}px))`;
+    }
 
     this.loupe.style.transform = `translate(${tx}px, ${ty}px)`;
     this.loupe.style.opacity = "1";
@@ -660,6 +702,12 @@ export class EyedropperOverlay {
    * (solid backgrounds and text), otherwise fall back to the captured pixel.
    */
   private resolveColorAt(clientX: number, clientY: number): string | null {
+    // Area averaging is a bitmap operation — the DOM probe answers a different
+    // question (one element's own color), so it only applies at 1×1.
+    if (this.sampleSize > 1) {
+      return this.sampleAverageAt(clientX, clientY, this.sampleSize);
+    }
+
     const bitmapHex = this.sampleBitmapAt(clientX, clientY);
     const domHex = probeDomColor(clientX, clientY);
 
@@ -678,6 +726,40 @@ export class EyedropperOverlay {
   private sampleBitmapAt(x: number, y: number): string | null {
     const { x: px, y: py } = this.clientToCanvas(x, y);
     return this.readHex(px, py);
+  }
+
+  /** Average of an NxN screen-pixel block centered on the point. */
+  private sampleAverageAt(
+    clientX: number,
+    clientY: number,
+    size: number
+  ): string | null {
+    if (!this.ctx || !this.canvas) {
+      return null;
+    }
+    const { x: cx, y: cy } = this.clientToCanvas(clientX, clientY);
+    const w = Math.max(1, Math.round(size * this.scaleX));
+    const h = Math.max(1, Math.round(size * this.scaleY));
+    const x0 = Math.max(0, Math.min(this.canvas.width - 1, cx - Math.floor(w / 2)));
+    const y0 = Math.max(0, Math.min(this.canvas.height - 1, cy - Math.floor(h / 2)));
+    const cw = Math.min(w, this.canvas.width - x0);
+    const ch = Math.min(h, this.canvas.height - y0);
+    if (cw < 1 || ch < 1) {
+      return null;
+    }
+    const data = this.ctx.getImageData(x0, y0, cw, ch).data;
+    let r = 0;
+    let g = 0;
+    let b = 0;
+    const count = cw * ch;
+    for (let i = 0; i < count; i += 1) {
+      r += data[i * 4]!;
+      g += data[i * 4 + 1]!;
+      b += data[i * 4 + 2]!;
+    }
+    const toHex = (value: number): string =>
+      Math.round(value / count).toString(16).padStart(2, "0");
+    return `#${toHex(r)}${toHex(g)}${toHex(b)}`.toUpperCase();
   }
 
   private readHex(x: number, y: number): string | null {

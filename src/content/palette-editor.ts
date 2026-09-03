@@ -1,6 +1,6 @@
-import { buildColorRamp } from "../shared/accent";
+import { buildColorRamp, contrastRatio, hexToOklch, oklchToHex } from "../shared/accent";
 import { copyText } from "../shared/clipboard";
-import { formatColor, parseHex } from "../shared/colors";
+import { COLOR_FORMATS, formatColor, parseHex } from "../shared/colors";
 import { parseHexInput } from "../shared/palette-io";
 import {
   exportPaletteAseFile,
@@ -22,6 +22,7 @@ import {
 } from "../shared/storage";
 import type { ColorFormat, ColorPalette } from "../shared/types";
 import {
+  CANCEL_ACTION_ICON_HTML,
   CHECK_SWATCH_ICON_HTML,
   DELETE_BUTTON_HTML,
   DELETE_ICON_HTML,
@@ -516,6 +517,22 @@ export class PaletteEditorView {
       copyText(formatted);
       this.callbacks.onToast(`Copied ${formatted}`, hex);
     });
+    button.addEventListener("contextmenu", (event) => {
+      event.preventDefault();
+      this.callbacks.getSwatchTooltip()?.hide();
+      showActionMenu(
+        this.container.getRootNode() as Document | ShadowRoot,
+        button,
+        COLOR_FORMATS.map((option) => ({
+          label: `${option.label} · ${formatColor(hex, option.value)}`,
+          action: () => {
+            const formatted = formatColor(hex, option.value);
+            copyText(formatted);
+            this.callbacks.onToast(`Copied ${formatted}`, hex);
+          },
+        }))
+      );
+    });
     // Keyboard reorder: arrows move the focused color, Shift jumps to the ends.
     button.addEventListener("keydown", (event) => {
       if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") {
@@ -553,12 +570,12 @@ export class PaletteEditorView {
     const ramp = document.createElement("button");
     ramp.type = "button";
     ramp.className = "palette-editor__ramp-btn";
-    ramp.setAttribute("aria-label", `Shades of ${label}`);
+    ramp.setAttribute("aria-label", `Color card for ${label}`);
     ramp.innerHTML = RAMP_ICON_HTML;
     ramp.addEventListener("click", (event) => {
       event.stopPropagation();
       this.callbacks.getSwatchTooltip()?.hide();
-      this.showRampOverlay(hex);
+      this.showColorCard(hex);
     });
 
     let blockDrag = false;
@@ -596,104 +613,334 @@ export class PaletteEditorView {
   }
 
   /*
-   * Shades & tints: a Tailwind-scale OKLCH ramp of the swatch. Click copies a
-   * step; the hover + adds it to the palette without closing the overlay (the
-   * grid re-syncs when the overlay closes).
+   * The Color Card: one overlay per swatch holding the tune sliders (OKLCH),
+   * the Tailwind-scale ramp, and contrast checks against white/black and the
+   * rest of the palette. Everything updates live as the color is tuned; adds
+   * and replaces apply without re-rendering (the grid re-syncs on close).
    */
-  private showRampOverlay(baseHex: string): void {
+  private showColorCard(baseHex: string): void {
     if (!this.palette) {
       return;
     }
 
+    let base = baseHex.toUpperCase();
+    const initial = hexToOklch(base);
+    const state = { L: initial.L, C: initial.C, h: (initial.h + 360) % 360 };
+    let tuned = base;
+
     const overlay = document.createElement("div");
     overlay.className =
-      "palette-editor__confirm-overlay palette-editor__ramp-overlay";
+      "palette-editor__confirm-overlay palette-editor__card-overlay";
 
     const dialog = document.createElement("div");
     dialog.className =
-      "palette-editor__confirm-dialog palette-editor__ramp-dialog";
+      "palette-editor__confirm-dialog palette-editor__card-dialog";
     dialog.setAttribute("role", "dialog");
-    dialog.setAttribute("aria-label", "Shades and tints");
+    dialog.setAttribute("aria-label", "Color card");
 
-    const title = document.createElement("p");
-    title.className = "palette-editor__confirm-title";
-    title.textContent = "Shades & tints";
+    /* -- header: live preview + value, click copies -- */
+    const head = document.createElement("div");
+    head.className = "palette-editor__card-head";
+    const preview = document.createElement("button");
+    preview.type = "button";
+    preview.className = "palette-editor__card-preview";
+    const value = document.createElement("button");
+    value.type = "button";
+    value.className = "palette-editor__card-value";
+    const copyTuned = (): void => {
+      const formatted = formatColor(tuned, this.colorFormat);
+      copyText(formatted);
+      this.callbacks.onToast(`Copied ${formatted}`, tuned);
+    };
+    preview.addEventListener("click", copyTuned);
+    value.addEventListener("click", copyTuned);
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "palette-editor__card-close";
+    closeBtn.setAttribute("aria-label", "Close color card");
+    closeBtn.innerHTML = CANCEL_ACTION_ICON_HTML;
+    head.append(preview, value, closeBtn);
 
-    const base = document.createElement("p");
-    base.className = "palette-editor__ramp-base";
-    const baseDot = document.createElement("span");
-    baseDot.className = "palette-editor__ramp-base-dot";
-    baseDot.style.backgroundColor = baseHex;
-    base.append(baseDot, formatColor(baseHex, this.colorFormat));
+    /* -- tune sliders -- */
+    const tuneLabel = document.createElement("p");
+    tuneLabel.className = "palette-editor__card-section-label";
+    tuneLabel.textContent = "Tune";
+    const sliders = document.createElement("div");
+    sliders.className = "palette-editor__card-sliders";
+    /*
+     * The gradient lives on a wrapper pill, NOT the input: Chrome's range
+     * internals keep painting artifacts into styled inputs, so the input is a
+     * fully transparent overlay that contributes only the thumb.
+     */
+    const makeSlider = (
+      label: string,
+      min: number,
+      max: number,
+      step: number,
+      get: () => number,
+      set: (v: number) => void
+    ): { input: HTMLInputElement; track: HTMLSpanElement } => {
+      const row = document.createElement("label");
+      row.className = "palette-editor__card-slider";
+      const tag = document.createElement("span");
+      tag.className = "palette-editor__card-slider-label";
+      tag.textContent = label;
+      const track = document.createElement("span");
+      track.className = "palette-editor__card-slider-track";
+      const input = document.createElement("input");
+      input.type = "range";
+      input.min = String(min);
+      input.max = String(max);
+      input.step = String(step);
+      input.value = String(get());
+      input.setAttribute("aria-label", `${label} slider`);
+      input.addEventListener("input", () => {
+        set(Number(input.value));
+        refresh();
+      });
+      input.addEventListener("keydown", (event) => {
+        event.stopPropagation();
+      });
+      track.append(input);
+      row.append(tag, track);
+      sliders.append(row);
+      return { input, track };
+    };
+    const { input: lSlider, track: lTrack } = makeSlider(
+      "L", 0, 100, 0.5,
+      () => state.L * 100,
+      (v) => { state.L = v / 100; }
+    );
+    const { input: cSlider, track: cTrack } = makeSlider(
+      "C", 0, 0.37, 0.002,
+      () => state.C,
+      (v) => { state.C = v; }
+    );
+    const { input: hSlider, track: hTrack } = makeSlider(
+      "H", 0, 360, 1,
+      () => state.h,
+      (v) => { state.h = v; }
+    );
 
+    /* -- actions on the tuned color -- */
+    const actions = document.createElement("div");
+    actions.className = "palette-editor__confirm-actions";
+    /* Staged ramp steps + the tuned color commit together on Add. */
+    const staged = new Set<string>();
+    const pendingColors = (): string[] => {
+      const colors = [...staged];
+      if (
+        tuned !== base &&
+        !staged.has(tuned) &&
+        !this.palette?.colors.includes(tuned)
+      ) {
+        colors.push(tuned);
+      }
+      return colors.filter((hex) => !this.palette?.colors.includes(hex));
+    };
+
+    const replaceBtn = document.createElement("button");
+    replaceBtn.type = "button";
+    replaceBtn.className = "palette-editor__action-btn";
+    replaceBtn.textContent = "Replace";
+    replaceBtn.addEventListener("click", () => {
+      void this.replaceCardColor(base, tuned).then((replaced) => {
+        if (replaced) {
+          this.callbacks.onToast("Color replaced", tuned);
+          close();
+        }
+      });
+    });
+    const addBtn = document.createElement("button");
+    addBtn.type = "button";
+    addBtn.className =
+      "palette-editor__action-btn panel__modal-btn--accent palette-editor__card-add";
+    addBtn.textContent = "Add";
+    addBtn.addEventListener("click", () => {
+      const colors = pendingColors();
+      if (colors.length === 0) {
+        return;
+      }
+      void this.addCardColors(colors).then(() => {
+        this.callbacks.onToast(
+          colors.length === 1
+            ? `Added ${formatColor(colors[0]!, this.colorFormat)}`
+            : `Added ${colors.length} colors`,
+          colors[0]
+        );
+        close();
+      });
+    });
+    actions.append(replaceBtn, addBtn);
+
+    /* -- ramp -- */
+    const rampLabel = document.createElement("p");
+    rampLabel.className = "palette-editor__card-section-label";
+    rampLabel.textContent = "Shades & tints";
     const grid = document.createElement("div");
     grid.className = "palette-editor__ramp-grid";
+
+    /* -- contrast: collapsed by default so color + ramp keep priority -- */
+    const contrastToggle = document.createElement("button");
+    contrastToggle.type = "button";
+    contrastToggle.className =
+      "palette-editor__card-section-label palette-editor__card-section-toggle";
+    contrastToggle.innerHTML =
+      '<span>Contrast</span><svg class="icon" viewBox="0 0 24 24" width="11" height="11" aria-hidden="true"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>';
+    contrastToggle.setAttribute("aria-expanded", "false");
+    const contrastList = document.createElement("div");
+    contrastList.className = "palette-editor__card-contrast";
+    contrastList.hidden = true;
+    contrastToggle.addEventListener("click", () => {
+      contrastList.hidden = !contrastList.hidden;
+      contrastToggle.setAttribute(
+        "aria-expanded",
+        contrastList.hidden ? "false" : "true"
+      );
+      contrastToggle.classList.toggle("is-open", !contrastList.hidden);
+    });
 
     const close = (): void => {
       overlay.remove();
       document.removeEventListener("keydown", onEscape, true);
-      // Adds were applied without re-rendering; sync the grid now.
       this.render();
     };
+    closeBtn.addEventListener("click", close);
 
-    for (const step of buildColorRamp(baseHex)) {
-      const cell = document.createElement("div");
-      cell.className = "palette-editor__ramp-cell";
-
-      const stepBtn = document.createElement("button");
-      stepBtn.type = "button";
-      stepBtn.className = "palette-editor__ramp-step";
-      if (step.isBase) {
-        stepBtn.classList.add("is-base");
-      }
-      stepBtn.style.backgroundColor = step.hex;
-      const formatted = formatColor(step.hex, this.colorFormat);
-      stepBtn.setAttribute("aria-label", `Copy ${formatted}`);
-
-      const stepLabel = document.createElement("span");
-      stepLabel.className = "palette-editor__ramp-step-label";
-      stepLabel.textContent = step.label;
-      const { r, g, b } = parseHex(step.hex);
-      stepLabel.style.color =
-        0.299 * r + 0.587 * g + 0.114 * b > 145 ? "#141414" : "#f6f6f6";
-      stepBtn.append(stepLabel);
-
-      stepBtn.addEventListener("click", () => {
-        copyText(formatted);
-        this.callbacks.onToast(`Copied ${formatted}`, step.hex);
-      });
-
-      const add = document.createElement("button");
-      add.type = "button";
-      add.className = "palette-editor__ramp-add";
-      const syncAdded = (): void => {
-        const added = Boolean(this.palette?.colors.includes(step.hex));
-        add.classList.toggle("is-added", added);
-        add.disabled = added;
-        add.innerHTML = added ? CHECK_SWATCH_ICON_HTML : PLUS_ICON_HTML;
-        add.setAttribute(
+    /*
+     * The ramp stays anchored to the swatch the card was opened for. Tapping
+     * a step STAGES it (accent ring); tapping again unstages. Nothing touches
+     * the palette until Add commits the staged set. Steps already in the
+     * palette are inert and wear the ✓ marker.
+     */
+    const rampSource = base;
+    const renderRamp = (): void => {
+      grid.replaceChildren();
+      for (const step of buildColorRamp(rampSource)) {
+        const cell = document.createElement("div");
+        cell.className = "palette-editor__ramp-cell";
+        const stepBtn = document.createElement("button");
+        stepBtn.type = "button";
+        stepBtn.className = "palette-editor__ramp-step";
+        stepBtn.style.backgroundColor = step.hex;
+        const formatted = formatColor(step.hex, this.colorFormat);
+        const inPalette = Boolean(this.palette?.colors.includes(step.hex));
+        stepBtn.classList.toggle("is-staged", staged.has(step.hex));
+        stepBtn.setAttribute(
           "aria-label",
-          added ? `${formatted} in palette` : `Add ${formatted} to palette`
+          inPalette
+            ? `${formatted} in palette`
+            : staged.has(step.hex)
+              ? `Unstage ${formatted}`
+              : `Stage ${formatted}`
         );
-      };
-      syncAdded();
-      add.addEventListener("click", (event) => {
-        event.stopPropagation();
-        void this.addRampColor(step.hex).then(syncAdded);
-      });
+        stepBtn.setAttribute(
+          "aria-pressed",
+          staged.has(step.hex) ? "true" : "false"
+        );
+        const stepLabel = document.createElement("span");
+        stepLabel.className = "palette-editor__ramp-step-label";
+        stepLabel.textContent = step.label;
+        const { r, g, b } = parseHex(step.hex);
+        stepLabel.style.color =
+          0.299 * r + 0.587 * g + 0.114 * b > 145 ? "#141414" : "#f6f6f6";
+        stepBtn.append(stepLabel);
+        if (inPalette) {
+          stepBtn.disabled = true;
+          const marker = document.createElement("span");
+          marker.className = "palette-editor__ramp-added-marker";
+          marker.innerHTML = CHECK_SWATCH_ICON_HTML;
+          marker.setAttribute("aria-hidden", "true");
+          cell.append(marker);
+        } else {
+          stepBtn.addEventListener("click", () => {
+            if (staged.has(step.hex)) {
+              staged.delete(step.hex);
+            } else {
+              staged.add(step.hex);
+            }
+            refresh();
+          });
+        }
+        cell.append(stepBtn);
+        grid.append(cell);
+      }
+    };
 
-      cell.append(stepBtn, add);
-      grid.append(cell);
-    }
+    const renderContrast = (): void => {
+      contrastList.replaceChildren();
+      const others: Array<{ label: string; hex: string }> = [
+        { label: "White", hex: "#FFFFFF" },
+        { label: "Black", hex: "#000000" },
+        ...(this.palette?.colors ?? [])
+          .filter((c) => c !== base)
+          .map((c) => ({ label: c, hex: c })),
+      ];
+      for (const other of others) {
+        const row = document.createElement("div");
+        row.className = "palette-editor__card-contrast-row";
+        const chip = document.createElement("span");
+        chip.className = "palette-editor__card-contrast-chip";
+        chip.style.backgroundColor = other.hex;
+        chip.style.color = tuned;
+        chip.textContent = "Aa";
+        const name = document.createElement("span");
+        name.className = "palette-editor__card-contrast-name";
+        name.textContent = other.label;
+        const ratio = contrastRatio(tuned, other.hex);
+        const ratioEl = document.createElement("span");
+        ratioEl.className = "palette-editor__card-contrast-ratio";
+        ratioEl.textContent = `${ratio.toFixed(2)}`;
+        const level = document.createElement("span");
+        level.className = "palette-editor__card-contrast-level";
+        const grade =
+          ratio >= 7 ? "AAA" : ratio >= 4.5 ? "AA" : ratio >= 3 ? "AA·L" : "✕";
+        level.textContent = grade;
+        level.classList.toggle("is-fail", grade === "✕");
+        row.append(chip, name, ratioEl, level);
+        contrastList.append(row);
+      }
+    };
 
-    const actions = document.createElement("div");
-    actions.className = "palette-editor__confirm-actions";
-    const done = document.createElement("button");
-    done.type = "button";
-    done.className = "palette-editor__action-btn";
-    done.textContent = "Done";
-    done.addEventListener("click", close);
-    actions.append(done);
+    const trackGradient = (stops: string[]): string =>
+      `linear-gradient(to right, ${stops.join(", ")})`;
+
+    const refresh = (): void => {
+      tuned = oklchToHex(state.L, state.C, state.h).toUpperCase();
+      preview.style.backgroundColor = tuned;
+      const formatted = formatColor(tuned, this.colorFormat);
+      value.textContent = formatted;
+      preview.setAttribute("aria-label", `Copy ${formatted}`);
+
+      lSlider.value = String(state.L * 100);
+      cSlider.value = String(state.C);
+      hSlider.value = String(state.h);
+      for (const input of [lSlider, cSlider, hSlider]) {
+        input.style.setProperty("--card-thumb", tuned);
+      }
+
+      const steps = (count: number, fn: (t: number) => string): string[] =>
+        Array.from({ length: count }, (_, i) => fn(i / (count - 1)));
+      lTrack.style.background = trackGradient(
+        steps(9, (t) => oklchToHex(t, state.C, state.h))
+      );
+      cTrack.style.background = trackGradient(
+        steps(9, (t) => oklchToHex(state.L, t * 0.37, state.h))
+      );
+      hTrack.style.background = trackGradient(
+        steps(13, (t) => oklchToHex(state.L, Math.max(state.C, 0.08), t * 360))
+      );
+
+      const colors = this.palette?.colors ?? [];
+      replaceBtn.disabled =
+        tuned === base || colors.includes(tuned) || !colors.includes(base);
+      const pending = pendingColors().length;
+      addBtn.disabled = pending === 0;
+      addBtn.textContent = pending > 1 ? `Add ${pending}` : "Add";
+
+      renderRamp();
+      renderContrast();
+    };
 
     const onEscape = (event: KeyboardEvent): void => {
       if (event.key !== "Escape") {
@@ -709,10 +956,64 @@ export class PaletteEditorView {
       }
     });
 
-    dialog.append(title, base, grid, actions);
+    dialog.append(
+      head,
+      tuneLabel,
+      sliders,
+      rampLabel,
+      grid,
+      contrastToggle,
+      contrastList,
+      actions
+    );
     overlay.append(dialog);
-    this.container.append(overlay);
-    done.focus();
+    // Full-panel modal layer — the editor area alone is too short for the card.
+    (this.container.closest(".panel") ?? this.container).append(overlay);
+    refresh();
+    closeBtn.focus();
+  }
+
+  /** Commits the staged card colors in one write. */
+  private async addCardColors(hexes: string[]): Promise<void> {
+    if (!this.palette || hexes.length === 0) {
+      return;
+    }
+    try {
+      const updated = await addColorsToPalette(this.palette.id, hexes);
+      if (updated) {
+        this.palette = { ...updated, colors: [...updated.colors] };
+        this.callbacks.onPaletteChanged();
+      }
+    } catch (error) {
+      this.handleStorageError(error);
+    }
+  }
+
+  /** Swap one palette color for the tuned value, preserving its position. */
+  private async replaceCardColor(
+    oldHex: string,
+    newHex: string
+  ): Promise<boolean> {
+    if (!this.palette) {
+      return false;
+    }
+    const colors = [...this.palette.colors];
+    const index = colors.indexOf(oldHex);
+    if (index < 0 || colors.includes(newHex)) {
+      return false;
+    }
+    colors[index] = newHex;
+    try {
+      const updated = await updatePalette(this.palette.id, { colors });
+      if (updated) {
+        this.palette = { ...updated, colors: [...updated.colors] };
+        this.callbacks.onPaletteChanged();
+        return true;
+      }
+    } catch (error) {
+      this.handleStorageError(error);
+    }
+    return false;
   }
 
   /** Adds a ramp step without re-rendering (would tear down the overlay). */

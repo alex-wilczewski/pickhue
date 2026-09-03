@@ -26,6 +26,9 @@ export const EXPORT_TAILWIND_ICON_HTML = `<svg class="icon icon--tailwind" viewB
 /** Stacked bars fading in weight — shades & tints ramp affordance. */
 export const RAMP_ICON_HTML = `<svg class="icon icon--ramp" viewBox="0 0 24 24" width="10" height="10" aria-hidden="true"><rect x="4" y="3.5" width="16" height="4.4" rx="2.2" fill="currentColor" opacity="0.35"/><rect x="4" y="9.8" width="16" height="4.4" rx="2.2" fill="currentColor" opacity="0.65"/><rect x="4" y="16.1" width="16" height="4.4" rx="2.2" fill="currentColor"/></svg>`;
 
+/** Sparkle for generate-from-page actions. */
+export const SPARKLE_ICON_HTML = `<svg class="icon icon--sparkle" viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path d="M11 4l1.6 4.1L16.7 9.7l-4.1 1.6L11 15.4l-1.6-4.1L5.3 9.7l4.1-1.6L11 4Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" fill="none"/><path d="M18 14.5l.75 1.9 1.9.75-1.9.75L18 19.8l-.75-1.9-1.9-.75 1.9-.75.75-1.9Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" fill="none"/></svg>`;
+
 /** Plus mark for add actions. */
 export const PLUS_ICON_HTML = `<svg class="icon icon--plus" viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>`;
 

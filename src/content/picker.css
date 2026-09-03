@@ -84,6 +84,7 @@
   width: 13.09px;
   height: 13.09px;
   transform: translate(-50%, -50%);
+  transition: width 0.12s ease, height 0.12s ease;
   box-shadow:
     0 0 0 1.5px rgba(255, 255, 255, 0.95),
     0 0 0 3px rgba(0, 0, 0, 0.55);

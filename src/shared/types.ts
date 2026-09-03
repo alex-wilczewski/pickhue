@@ -1,4 +1,11 @@
-export type ColorFormat = "hex" | "rgb" | "hsl" | "oklch";
+export type ColorFormat =
+  | "hex"
+  | "rgb"
+  | "hsl"
+  | "oklch"
+  | "lch"
+  | "oklab"
+  | "hwb";
 export type ThemeMode = "system" | "light" | "dark";
 
 export interface Settings {

@@ -267,6 +267,33 @@ button {
   background: var(--divider);
 }
 
+.panel__section-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+/* Clear-recents: destructive, so it reveals on section hover/focus like the
+   per-swatch remove badges, keeping the resting header untouched. */
+.panel__section-action--clear {
+  color: var(--text-muted);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+}
+
+.panel__section--recent:hover .panel__section-action--clear:not([hidden]),
+.panel__section--recent:focus-within .panel__section-action--clear:not([hidden]) {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.panel__section-action--clear:hover:not(:disabled) {
+  color: var(--danger);
+  background: var(--divider);
+}
+
 .panel__section-action.is-active {
   color: var(--text-muted);
 }
@@ -282,6 +309,12 @@ button {
 
 .panel__section--recent {
   padding-bottom: 12px;
+}
+
+/* The header's icon actions (24px) hide when there are no recents; reserve
+   their height so clearing/undoing never shifts the panel. */
+.panel__section--recent .panel__section-head {
+  min-height: 24px;
 }
 
 .panel__section--palettes {
@@ -1357,11 +1390,11 @@ button {
 
 .palette-editor__ramp-btn {
   position: absolute;
-  bottom: -2px;
-  right: -2px;
+  bottom: -3px;
+  right: -3px;
   z-index: 2;
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   padding: 0;
   border: 1px solid var(--swatch-border);
   border-radius: 50%;
@@ -1383,8 +1416,8 @@ button {
 .palette-editor__ramp-btn .icon {
   display: block;
   flex-shrink: 0;
-  width: 8px;
-  height: 8px;
+  width: 9px;
+  height: 9px;
 }
 
 .palette-editor__swatch-item:hover .palette-editor__ramp-btn,
@@ -1955,6 +1988,30 @@ button {
   border-radius: 12px;
 }
 
+.toast--actionable {
+  pointer-events: auto;
+}
+
+.toast__action {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--accent-link);
+  flex-shrink: 0;
+  padding: 2px 5px;
+  margin: -2px -5px -2px -1px;
+  border-radius: 6px;
+  white-space: nowrap;
+  transition: color 0.15s ease;
+}
+
+.toast__action:hover {
+  color: var(--text);
+}
+
+.toast__action[hidden] {
+  display: none;
+}
+
 .toast__swatch {
   width: 24px;
   height: 24px;
@@ -2026,7 +2083,7 @@ button {
 .palette-editor__ramp-step {
   position: relative;
   width: 100%;
-  aspect-ratio: 1;
+  aspect-ratio: 1 / 1;
   border-radius: 11px;
   border: 1px solid var(--swatch-border);
   display: inline-flex;
@@ -2039,9 +2096,39 @@ button {
   border-color: var(--swatch-border-hover);
 }
 
-/* The step whose lightness matches the source color. */
-.palette-editor__ramp-step.is-base {
-  box-shadow: inset 0 0 0 2px var(--accent);
+/* Staged for Add — identical treatment to the recents selection ring. */
+.palette-editor__ramp-step.is-staged {
+  position: relative;
+  z-index: 1;
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.palette-editor__ramp-step:disabled {
+  cursor: default;
+}
+
+/* Passive marker: this step is already in the palette. */
+.palette-editor__ramp-added-marker {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  z-index: 2;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--close-bg);
+  border: 1px solid var(--swatch-border);
+  color: var(--text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.palette-editor__ramp-added-marker .icon {
+  width: 7px;
+  height: 7px;
 }
 
 .palette-editor__ramp-step-label {
@@ -2053,45 +2140,342 @@ button {
   pointer-events: none;
 }
 
-.palette-editor__ramp-add {
-  position: absolute;
-  top: -4px;
-  right: -4px;
-  z-index: 2;
-  width: 15px;
-  height: 15px;
-  padding: 0;
+
+/* ============ Color Card ============ */
+.palette-editor__card-overlay {
+  padding: 12px;
+}
+
+.palette-editor__card-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 100%;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.palette-editor__card-dialog::-webkit-scrollbar {
+  display: none;
+}
+
+.palette-editor__card-dialog > * {
+  flex-shrink: 0;
+}
+
+.palette-editor__card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.palette-editor__card-preview {
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
   border: 1px solid var(--swatch-border);
-  border-radius: 50%;
-  background: var(--close-bg);
+  flex-shrink: 0;
+  transition: border-color 0.15s ease;
+}
+
+.palette-editor__card-preview:hover {
+  border-color: var(--swatch-border-hover);
+}
+
+.palette-editor__card-value {
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
   color: var(--text);
+  padding: 4px 8px;
+  border-radius: 8px;
+  text-align: left;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: background-color 0.15s ease;
+}
+
+.palette-editor__card-value:hover {
+  background: var(--divider);
+}
+
+.palette-editor__card-close {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  margin-left: auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.12s ease, background-color 0.15s ease;
+  border-radius: 8px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  transition: color 0.15s ease, background-color 0.15s ease;
 }
 
-.palette-editor__ramp-add .icon {
-  width: 8px;
-  height: 8px;
+.palette-editor__card-close:hover {
+  color: var(--text);
+  background: var(--divider);
 }
 
-.palette-editor__ramp-cell:hover .palette-editor__ramp-add,
-.palette-editor__ramp-cell:focus-within .palette-editor__ramp-add {
-  opacity: 1;
-  pointer-events: auto;
+.palette-editor__card-sliders {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
 }
 
-.palette-editor__ramp-add:hover:not(:disabled) {
-  background: var(--close-bg-hover);
+.palette-editor__card-slider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.palette-editor__ramp-add.is-added {
-  opacity: 1;
-  pointer-events: none;
-  background: var(--accent);
-  color: var(--accent-text);
-  border-color: transparent;
+.palette-editor__card-slider-label {
+  width: 12px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  text-align: center;
+}
+
+.palette-editor__card-slider-track {
+  position: relative;
+  display: block;
+  flex: 1;
+  min-width: 0;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--swatch-track);
+  /* Inset ring instead of a border: no antialiased crescents at the caps. */
+  box-shadow: inset 0 0 0 1px var(--swatch-border);
+}
+
+.palette-editor__card-slider input[type="range"] {
+  appearance: none;
+  -webkit-appearance: none;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+.palette-editor__card-slider input[type="range"]::-webkit-slider-runnable-track {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 100%;
+  background: transparent;
+  border: none;
+}
+
+.palette-editor__card-slider input[type="range"]:focus {
+  outline: none;
+}
+
+.palette-editor__card-slider input[type="range"]:focus-visible::-webkit-slider-thumb {
+  box-shadow:
+    0 0 0 2px var(--accent),
+    0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* Thumb wears the current color — same ring language as the loupe reticle. */
+.palette-editor__card-slider input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--card-thumb, var(--toggle-thumb));
+  border: 2px solid #ffffff;
+  box-shadow:
+    0 0 0 1px rgba(20, 20, 20, 0.45),
+    0 1px 4px rgba(0, 0, 0, 0.3);
+  cursor: grab;
+}
+
+.palette-editor__card-slider input[type="range"]:active::-webkit-slider-thumb {
+  cursor: grabbing;
+}
+
+.palette-editor__card-section-label {
+  margin: 2px 0 0;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.palette-editor__card-section-toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.palette-editor__card-section-toggle:hover {
+  color: var(--text);
+}
+
+.palette-editor__card-section-toggle .icon {
+  transition: transform 0.15s ease;
+}
+
+.palette-editor__card-section-toggle.is-open .icon {
+  transform: rotate(180deg);
+}
+
+.palette-editor__card-contrast[hidden] {
+  display: none;
+}
+
+.palette-editor__card-contrast {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  gap: 2px;
+  max-height: 150px;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.palette-editor__card-contrast::-webkit-scrollbar {
+  display: none;
+}
+
+.palette-editor__card-contrast-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 4px;
+  border-radius: 8px;
+}
+
+.palette-editor__card-contrast-chip {
+  width: 30px;
+  height: 21px;
+  border-radius: 6px;
+  border: 1px solid var(--swatch-border);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.palette-editor__card-contrast-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.palette-editor__card-contrast-ratio {
+  font-size: 10.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  flex-shrink: 0;
+}
+
+.palette-editor__card-contrast-level {
+  min-width: 34px;
+  text-align: center;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 2px 5px;
+  border-radius: 999px;
+  background: var(--swatch-track);
+  color: var(--text);
+  flex-shrink: 0;
+}
+
+.palette-editor__card-contrast-level.is-fail {
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.palette-editor__card-add:disabled,
+.palette-editor__card-dialog .palette-editor__action-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ============ Palette from this page ============ */
+.panel__extract-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 240px;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.panel__extract-groups::-webkit-scrollbar {
+  display: none;
+}
+
+.panel__extract-group-label {
+  margin: 6px 0 4px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.panel__extract-group-label:first-child {
+  margin-top: 0;
+}
+
+.panel__extract-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.panel__extract-swatch {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  border-radius: 9px;
+  transition: opacity 0.15s ease, box-shadow 0.15s ease;
+}
+
+.panel__extract-swatch.is-excluded {
+  opacity: 0.22;
+}
+
+.panel__extract-name {
+  width: 100%;
+  margin: 10px 0 12px;
+  font: inherit;
+  font-size: 12px;
+  padding: 7px 9px;
+  border-radius: 8px;
+  border: 1px solid var(--control-border);
+  background: var(--bg);
+  color: var(--text);
+  transition: border-color 0.15s ease;
+}
+
+.panel__extract-name:focus {
+  outline: none;
+  border-color: var(--accent);
 }
