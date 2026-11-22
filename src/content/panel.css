@@ -45,10 +45,10 @@ button {
   --text: #ffffff;
   --text-muted: rgba(246, 246, 246, 0.65);
   --divider: rgba(246, 246, 246, 0.12);
-  --accent: #fa7c75;
+  --accent: #83c839;
   --accent-text: #141414;
-  --accent-hover: #ff958d;
-  --accent-link: #ffb9b3;
+  --accent-hover: #93d94c;
+  --accent-link: #b1de8b;
   --danger: #d64545;
   --danger-text: #ffffff;
   --danger-hover: #bf3a3a;
@@ -117,10 +117,10 @@ button {
   --text: #141414;
   --text-muted: rgba(20, 20, 20, 0.72);
   --divider: rgba(20, 20, 20, 0.14);
-  --accent: #d75d57;
+  --accent: #5f9d00;
   --accent-text: #141414;
-  --accent-hover: #e76b65;
-  --accent-link: #a7031a;
+  --accent-hover: #6cac21;
+  --accent-link: #3b6600;
   --danger: #dc2626;
   --danger-text: #ffffff;
   --danger-hover: #b91c1c;

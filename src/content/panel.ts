@@ -2142,7 +2142,7 @@ export class PanelController {
     this.panelEl.style.setProperty("--accent-text", tokens.accentText);
     this.panelEl.style.setProperty("--accent-link", tokens.accentLink);
     for (const [prop, value] of Object.entries(
-      chromeTintTokens(tokens.hue, theme)
+      chromeTintTokens(tokens.hue, theme, tokens.neutral)
     )) {
       this.panelEl.style.setProperty(prop, value);
     }

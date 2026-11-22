@@ -166,8 +166,8 @@ function styleToastMenuItem(item: HTMLElement, theme: "light" | "dark"): void {
 function styleToastActionItem(item: HTMLElement, theme: "light" | "dark"): void {
   const link =
     theme === "light"
-      ? "var(--pickhue-accent-link, #a7031a)"
-      : "var(--pickhue-accent-link, #ffb9b3)";
+      ? "var(--pickhue-accent-link, #3b6600)"
+      : "var(--pickhue-accent-link, #b1de8b)";
   const hover = theme === "light" ? "#141414" : "#f6f6f6";
   item.style.color = link;
   item.style.justifyContent = "flex-start";

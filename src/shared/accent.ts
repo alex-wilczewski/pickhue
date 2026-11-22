@@ -2,8 +2,11 @@
  * Dynamic accent derivation — the 3.0 brand system. The UI derives its accent
  * from the user's most recent pick: the picked hue is kept, while lightness and
  * chroma are normalized in OKLCH so any pick yields a vibrant, legible accent.
- * Near-neutral picks (grays, white, black) fall back to the default coral so
- * the panel never tints itself gray.
+ * Near-neutral picks (grays, white, black) carry no usable hue — a hex one step
+ * off pure gray swings the hue wildly — so instead of inventing one, the UI goes
+ * achromatic and tracks the pick's LIGHTNESS: white picks drive a near-white
+ * accent, black picks a near-black one. Only the no-pick case falls back to the
+ * coral default.
  *
  * Everything here is pure math on hex strings; callers apply the results as
  * inline CSS custom properties over the static fallbacks in panel.css /
@@ -19,11 +22,16 @@ export interface AccentTokens {
   accentLink: string;
   /** OKLCH hue the accent (and chrome tint) derived from. */
   hue: number;
+  /** True when the pick was near-gray: chrome tints neutral, not by `hue`. */
+  neutral: boolean;
 }
 
-/** Warm coral default — the brand accent before the first colorful pick. */
-const DEFAULT_ACCENT_HUE = 25;
-const DEFAULT_ACCENT_CHROMA = 0.155;
+/**
+ * The original PickHue green (#87d624, OKLCH hue ~132) — the brand accent
+ * before the first colorful pick, kept as an homage to the 1.x/2.x identity.
+ */
+const DEFAULT_ACCENT_HUE = 132;
+const DEFAULT_ACCENT_CHROMA = 0.19;
 /** Picks with less OKLCH chroma than this keep the default accent. */
 const NEUTRAL_CHROMA_CUTOFF = 0.035;
 
@@ -181,15 +189,43 @@ export function contrastRatio(a: string, b: string): number {
 }
 
 /** Resolve the hue the accent system should use for a pick (or no pick). */
-function resolveAccentSource(pick: string | null): { h: number; C: number } {
+function resolveAccentSource(pick: string | null): {
+  h: number;
+  C: number;
+  /** Lightness of the pick itself; null when there is no pick. */
+  L: number | null;
+  neutral: boolean;
+} {
   if (!pick) {
-    return { h: DEFAULT_ACCENT_HUE, C: DEFAULT_ACCENT_CHROMA };
+    return { h: DEFAULT_ACCENT_HUE, C: DEFAULT_ACCENT_CHROMA, L: null, neutral: false };
   }
-  const { C, h } = hexToOklch(pick);
+  const { L, C, h } = hexToOklch(pick);
   if (C < NEUTRAL_CHROMA_CUTOFF) {
-    return { h: DEFAULT_ACCENT_HUE, C: DEFAULT_ACCENT_CHROMA };
+    // Hue is numerical noise this close to gray — go achromatic and let the
+    // pick's lightness drive the accent instead.
+    return { h: DEFAULT_ACCENT_HUE, C: DEFAULT_ACCENT_CHROMA, L, neutral: true };
   }
-  return { h, C };
+  return { h, C, L, neutral: false };
+}
+
+/** Panel background lightness per theme — accents must stay clear of it. */
+const PANEL_BG_L: Record<ResolvedTheme, number> = { dark: 0.315, light: 0.945 };
+/** Minimum OKLCH lightness gap between accent and panel background. */
+const MIN_BG_SEPARATION = 0.14;
+
+/**
+ * Achromatic accent for a near-gray pick. Lightness tracks the pick so white
+ * reads light and black reads dark, then is pushed clear of the panel
+ * background so the CTA never dissolves into it.
+ */
+function neutralAccentL(pickL: number, theme: ResolvedTheme): number {
+  const bgL = PANEL_BG_L[theme];
+  // Compress [0,1] into a band that never hits pure white or black.
+  let L = 0.18 + pickL * 0.75;
+  if (Math.abs(L - bgL) < MIN_BG_SEPARATION) {
+    L = L >= bgL ? bgL + MIN_BG_SEPARATION : bgL - MIN_BG_SEPARATION;
+  }
+  return Math.min(0.93, Math.max(0.16, L));
 }
 
 /** Accent token set for the given pick (null -> default coral) and theme. */
@@ -197,8 +233,34 @@ export function deriveAccentTokens(
   pick: string | null,
   theme: ResolvedTheme
 ): AccentTokens {
-  const { h, C } = resolveAccentSource(pick);
+  const { h, C, L: pickL, neutral } = resolveAccentSource(pick);
   const dark = theme === "dark";
+
+  if (neutral && pickL !== null) {
+    // Achromatic takeover: a white pick lightens the UI, a black pick darkens
+    // it, rather than snapping to the brand default and looking unresponsive.
+    const L = neutralAccentL(pickL, theme);
+    const bgL = PANEL_BG_L[theme];
+    const accent = oklchToHex(L, 0, h);
+    return {
+      accent,
+      accentHover: oklchToHex(
+        L >= bgL ? Math.min(0.98, L + 0.05) : Math.max(0.04, L - 0.05),
+        0,
+        h
+      ),
+      accentText:
+        contrastRatio(accent, "#141414") >= contrastRatio(accent, "#ffffff")
+          ? "#141414"
+          : "#ffffff",
+      // Fixed either side of the panel background so link text stays readable
+      // no matter how light or dark the pick was.
+      accentLink: oklchToHex(dark ? 0.85 : 0.4, 0, h),
+      hue: h,
+      neutral: true,
+    };
+  }
+
   const L = pickAccentL(h, theme);
   const chroma = Math.min(Math.max(C, 0.12), 0.185, maxChromaAt(L, h));
   const accent = oklchToHex(L, chroma, h);
@@ -213,6 +275,7 @@ export function deriveAccentTokens(
       ? oklchToHex(0.85, Math.min(maxChromaAt(0.85, h), 0.12), h)
       : oklchToHex(0.46, Math.min(maxChromaAt(0.46, h), 0.185), h),
     hue: h,
+    neutral: false,
   };
 }
 
@@ -269,9 +332,13 @@ export function buildColorRamp(source: string): RampStep[] {
  */
 export function chromeTintTokens(
   hue: number,
-  theme: ResolvedTheme
+  theme: ResolvedTheme,
+  neutral = false
 ): Record<string, string> {
-  const t = (L: number, C: number): string => oklchToHex(L, C, hue);
+  // A near-gray pick has no hue worth carrying, so the chrome drops its tint
+  // entirely instead of wearing the default hue over a colorless pick.
+  const t = (L: number, C: number): string =>
+    oklchToHex(L, neutral ? 0 : C, hue);
   if (theme === "dark") {
     return {
       "--bg": t(0.315, 0.012),
@@ -304,9 +371,10 @@ export function tintedOverlaySurface(
   pick: string | null,
   theme: ResolvedTheme
 ): string {
-  const { h } = resolveAccentSource(pick);
-  const hex =
-    theme === "dark" ? oklchToHex(0.27, 0.018, h) : oklchToHex(0.975, 0.008, h);
+  const { h, neutral } = resolveAccentSource(pick);
+  const tint = (L: number, C: number): string =>
+    oklchToHex(L, neutral ? 0 : C, h);
+  const hex = theme === "dark" ? tint(0.27, 0.018) : tint(0.975, 0.008);
   const [r, g, b] = hexToRgb(hex);
   return `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, 0.94)`;
 }
