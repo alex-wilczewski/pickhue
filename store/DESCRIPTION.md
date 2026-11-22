@@ -7,7 +7,7 @@ NEW IN 3.1 — PRO TOOLS
 • Contrast checker — WCAG ratios with AAA/AA grades against white, black, and your palette, live while you tune
 • Palette from this page — one click gathers a page's colors, grouped into backgrounds, text, and borders
 • Area-average sampling — average 3×3 or 5×5 pixels for photos and anti-aliased edges
-• Copy as anything — right-click a swatch for HEX, RGB, HSL, OKLCH, LCH, OKLAB, or HWB
+• Copy as anything — right-click a swatch to copy its value in any of seven color formats, from HEX to OKLCH
 
 NEW IN 3.0 — PICKHUE WEARS YOUR COLORS
 • Dynamic accent — the whole UI tints itself to your last pick, tuned in OKLCH so every hue stays vibrant and legible

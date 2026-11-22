@@ -2,6 +2,24 @@
 
 All notable changes to PickHue are documented here.
 
+## [3.2.0] — 2026-11-21
+
+**The green is back.** The brand default returns to the original PickHue green, and near-neutral picks now actually take over the UI instead of snapping to a fallback.
+
+- **Original green restored** — the default accent returns to the 1.x/2.x green (`#87d624`, OKLCH hue 132) as an homage to the original identity; the 3.0 coral default is retired
+- **Neutral picks take over properly** — picking white, black, or a gray used to discard the pick and fall back to the brand default, which read as the UI ignoring you. Near-gray picks now drive an achromatic accent whose lightness tracks the pick: white lightens the UI, black darkens it, and the chrome tint drops to zero chroma instead of wearing a hue the pick never had. Accent lightness is held clear of the panel background so the CTA never dissolves into it
+- **New palette is a `+`** — the Saved Palettes action matches the Recent Colors button instead of a text label, with its name in the tooltip
+- **No more "read and change all your data on all websites"** — PickHue no longer requests `<all_urls>`. It runs on `activeTab` alone, which Chrome grants when you click the icon or press the shortcut and revokes when the tab navigates, so installing it now shows **no site-access warning at all**. See [store/PERMISSIONS.md](store/PERMISSIONS.md)
+- **Correct colors over images, gradients and canvases** — the CSS probe used to walk *past* an element that painted its own pixels and report an ancestor's background instead, so a gradient panel, a photo, a `<canvas>` or an SVG icon could report the page background rather than what you were pointing at. It now defers to the captured pixel whenever something paints over the stack
+- **Calmer scroll recapture** — the loupe steps aside as soon as the page starts moving, instead of showing stale pixels and then blinking once scrolling stops, and fades back in when the fresh capture lands. Captures are also spaced to stay under Chrome's 2-per-second limit, which stop-start scrolling could previously exceed, silently leaving the loupe stale
+
+## [3.1.1] — 2026-09-04
+
+Patch release: picker performance on media-heavy pages, and a store-listing copy fix.
+
+- **Picker performance** — the loupe no longer redraws while the cursor is still, and reads its magnified neighbourhood in a single canvas readback instead of 121 per frame. The colour under the crosshair is now resolved once per frame rather than twice, which also halves the work of 3×3 / 5×5 area averaging. Fixes stuttering on pages with playing audio or video
+- Store listing: reworded the "Copy as anything" line, which Chrome Web Store review flagged as keyword spam
+
 ## [3.1.0] — 2026-09-03
 
 **Pro tools release.** The UX-audit round: a Color Card for every palette color, WCAG contrast checking, page-palette extraction, area-average sampling, and four new color formats.
