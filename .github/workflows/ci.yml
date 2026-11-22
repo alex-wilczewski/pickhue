@@ -26,29 +26,13 @@ jobs:
       - name: Test
         run: npm test
 
+      # prebuild generates the icons and postbuild builds the IIFE content
+      # script; npm runs both around this one command.
       - name: Build
-        run: npm run build && npm run postbuild
+        run: npm run build
 
       # The permission set is the product's central promise, so it is a build
       # gate rather than a review checklist item. Any reintroduction of
       # host_permissions or "tabs" fails CI loudly.
       - name: Assert the shipped permission set
-        run: |
-          node --input-type=module -e '
-            import { readFileSync } from "node:fs";
-            const m = JSON.parse(readFileSync("dist/manifest.json", "utf8"));
-            const expected = ["activeTab", "scripting", "storage"];
-            const actual = [...(m.permissions ?? [])].sort();
-            const problems = [];
-            if (JSON.stringify(actual) !== JSON.stringify(expected))
-              problems.push(`permissions are ${JSON.stringify(actual)}, expected ${JSON.stringify(expected)}`);
-            if (m.host_permissions)
-              problems.push("host_permissions is present — it must stay absent so installing shows no site-access warning");
-            if (m.optional_host_permissions)
-              problems.push("optional_host_permissions is present");
-            if (problems.length) {
-              console.error("Manifest permission check failed:\n  - " + problems.join("\n  - "));
-              process.exit(1);
-            }
-            console.log("Permissions OK:", JSON.stringify(actual), "· no host permissions");
-          '
+        run: node scripts/check-manifest.mjs

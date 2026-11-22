@@ -1,0 +1,92 @@
+name: Release
+
+# Tagging a version is the whole release. Pushing `3.2.0` builds the
+# extension, re-runs every gate, and publishes a GitHub release with the
+# upload-ready zip attached and that version's changelog entry as the notes.
+# Nothing is built on a laptop, so what people download is what CI produced
+# from the tagged commit.
+on:
+  push:
+    tags: ["[0-9]+.[0-9]+.[0-9]+"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build and release (e.g. 3.2.0)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: build · verify · publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # A tag that disagrees with package.json produces a zip whose filename
+      # and manifest version differ from the release it is attached to, which
+      # is confusing forever afterwards. Catch it before anything is published.
+      - name: Check the tag matches package.json
+        run: |
+          TAG="${{ inputs.tag || github.ref_name }}"
+          PKG=$(node -p "require('./package.json').version")
+          if [ "$TAG" != "$PKG" ]; then
+            echo "Tag $TAG does not match package.json version $PKG." >&2
+            exit 1
+          fi
+          echo "VERSION=$PKG" >> "$GITHUB_ENV"
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Assert the shipped permission set
+        run: node scripts/check-manifest.mjs
+
+      # manifest.json has to sit at the root of the zip or the Web Store
+      # rejects the upload.
+      - name: Package
+        run: |
+          cd dist
+          zip -qr "../pickhue-${VERSION}.zip" .
+          cd ..
+          unzip -l "pickhue-${VERSION}.zip" | head -20
+
+      # Release notes are that version's section of CHANGELOG.md, so the
+      # changelog stays the single place the story is written.
+      - name: Extract the changelog entry
+        run: |
+          awk -v ver="## [${VERSION}]" '
+            index($0, ver) == 1 { found = 1; next }
+            found && /^## \[/ { exit }
+            found { print }
+          ' CHANGELOG.md > release-notes.md
+          if [ ! -s release-notes.md ]; then
+            echo "No CHANGELOG.md entry for ${VERSION}." >&2
+            exit 1
+          fi
+          cat release-notes.md
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${VERSION}" \
+            --title "PickHue ${VERSION}" \
+            --notes-file release-notes.md \
+            "pickhue-${VERSION}.zip"

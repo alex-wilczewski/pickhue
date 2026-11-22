@@ -28,15 +28,9 @@ for (const file of required) {
   }
 }
 
-const manifest = JSON.parse(
-  readFileSync(join(distDir, "manifest.json"), "utf8")
-);
-if (Array.isArray(manifest.permissions) && manifest.permissions.includes("tabs")) {
-  console.error(
-    'dist/manifest.json still requests the "tabs" permission — remove it before packaging.'
-  );
-  process.exit(1);
-}
+// Same permission gate CI runs, so a hand-made zip cannot ship a manifest
+// that would trigger an install warning.
+execSync("node scripts/check-manifest.mjs", { cwd: root, stdio: "inherit" });
 
 if (existsSync(zipPath)) {
   rmSync(zipPath);
