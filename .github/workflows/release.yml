@@ -82,7 +82,7 @@ jobs:
             index($0, ver) == 1 { found = 1; next }
             found && /^## \[/ { exit }
             found { print }
-          ' CHANGELOG.md > release-notes.md
+          ' CHANGELOG.md | sed -e '/./,$!d' > release-notes.md
           if [ ! -s release-notes.md ]; then
             echo "No CHANGELOG.md entry for ${VERSION}." >&2
             exit 1
@@ -93,7 +93,19 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${TAG_NAME}" \
-            --title "PickHue ${VERSION}" \
-            --notes-file release-notes.md \
-            "pickhue-${VERSION}.zip"
+          # Re-runnable: if a release for this tag already exists — a first
+          # attempt that died after publishing, or a deliberate re-run from
+          # the Actions tab — update it in place rather than failing at the
+          # very last step with everything else already done.
+          if gh release view "${TAG_NAME}" >/dev/null 2>&1; then
+            echo "Release ${TAG_NAME} exists; updating it."
+            gh release edit "${TAG_NAME}" \
+              --title "PickHue ${VERSION}" \
+              --notes-file release-notes.md
+            gh release upload "${TAG_NAME}" "pickhue-${VERSION}.zip" --clobber
+          else
+            gh release create "${TAG_NAME}" \
+              --title "PickHue ${VERSION}" \
+              --notes-file release-notes.md \
+              "pickhue-${VERSION}.zip"
+          fi
