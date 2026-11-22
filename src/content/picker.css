@@ -23,12 +23,25 @@
   height: 144px;
   pointer-events: none;
   will-change: transform;
-  transition: opacity 0.12s ease;
+  transition: opacity 0.16s ease-out;
 }
 
+/*
+ * The overlay has to be genuinely absent from the screenshot, so hiding is
+ * instant and uses visibility (the loupe carries an inline opacity from the
+ * render loop, hence the !important to win over it). Coming back is the part
+ * worth easing: the lens fades in rather than snapping, which reads as
+ * refocusing instead of a glitch.
+ */
 #pickhue-picker-root.is-recapturing .pickhue-loupe,
 #pickhue-picker-root.is-recapturing .pickhue-picker__hint {
   visibility: hidden;
+  opacity: 0 !important;
+  transition: none !important;
+}
+
+.pickhue-picker__hint {
+  transition: opacity 0.16s ease-out;
 }
 
 .pickhue-loupe__glass {

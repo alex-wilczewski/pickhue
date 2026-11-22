@@ -34,8 +34,17 @@ const ZOOM_STEP = 0.1;
 /** S cycles through these sample sizes (NxN screen-pixel average). */
 const SAMPLE_SIZES = [1, 3, 5] as const;
 const SCROLL_SETTLE_MS = 150;
+/**
+ * Chrome throttles tabs.captureVisibleTab to 2 calls/second and silently
+ * rejects the rest, so stay just under it.
+ */
+const MIN_CAPTURE_INTERVAL_MS = 520;
 /** If DOM and bitmap disagree beyond this, trust the rendered pixel. */
 const DOM_BITMAP_MAX_DISTANCE_SQ = 55 * 55;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function waitForRepaint(): Promise<void> {
   return new Promise((resolve) => {
@@ -94,6 +103,13 @@ export class EyedropperOverlay {
   private capturePending = false;
   private scrollCapturePending = false;
   private scrollCaptureTimer = 0;
+  /** Timestamp of the last capture, for the 2/second throttle. */
+  private lastCaptureAt = 0;
+  // Bumped whenever a new screenshot lands, so a recapture (or the capture that
+  // races the overlay open) repaints even if the pointer never moved.
+  private captureGeneration = 0;
+  // Signature of the last frame actually drawn; identical signature => no work.
+  private lastRenderKey = "";
   private themeListenerAttached = false;
 
   private readonly onThemeStorageChange = (
@@ -232,8 +248,14 @@ export class EyedropperOverlay {
       return;
     }
 
-    // Recapture only after scrolling stops — hiding the overlay during capture
-    // would otherwise flash the loupe on every scroll tick.
+    // The capture is stale the instant the page moves, so the loupe is showing
+    // pixels that are no longer under the cursor. Step it aside for the whole
+    // scroll instead of letting it display a lie and then blink once at the
+    // end: it leaves as the page starts moving and fades back in refocused.
+    // The overlay being hidden already is also why the capture below can fire
+    // immediately once scrolling settles.
+    this.setCaptureOverlayHidden(true);
+
     window.clearTimeout(this.scrollCaptureTimer);
     this.scrollCaptureTimer = window.setTimeout(() => {
       this.scrollCaptureTimer = 0;
@@ -337,6 +359,20 @@ export class EyedropperOverlay {
     this.setCaptureOverlayHidden(true);
     await waitForRepaint();
 
+    // Chrome caps captureVisibleTab at MAX_CAPTURE_VISIBLE_TAB_CALLS_PER_SECOND
+    // (2). Stop-start scrolling clears that bar easily, and a rejected capture
+    // fails silently — the loupe just keeps showing stale pixels. Space the
+    // calls out instead; the wait happens while the overlay is already hidden,
+    // so it reads as the lens refocusing rather than as a stall.
+    const sinceLast = Date.now() - this.lastCaptureAt;
+    if (sinceLast < MIN_CAPTURE_INTERVAL_MS) {
+      await sleep(MIN_CAPTURE_INTERVAL_MS - sinceLast);
+      if (!this.active) {
+        return false;
+      }
+    }
+    this.lastCaptureAt = Date.now();
+
     try {
       const response = (await chrome.runtime.sendMessage({
         type: "CAPTURE_TAB",
@@ -359,6 +395,7 @@ export class EyedropperOverlay {
     }
 
     this.updateCaptureMetrics(decoded.width, decoded.height);
+    this.captureGeneration += 1;
     return true;
   }
 
@@ -534,7 +571,21 @@ export class EyedropperOverlay {
     if (!this.active) {
       return;
     }
-    this.update();
+
+    // Skip the frame when nothing that affects the loupe has changed. Without
+    // this the picker re-probes the DOM and re-reads the capture 60x a second
+    // with the cursor sitting still, which is what makes pages with playing
+    // media stutter while the picker is open. Every input the render depends on
+    // is in the key: pointer position (glass, edge clipping, chip shift), zoom,
+    // sample size (averaging + reticle), and the capture generation.
+    const key = this.hasPointer
+      ? `${this.pointerX},${this.pointerY},${this.zoom},${this.sampleSize},${this.captureGeneration},${this.colorFormat}`
+      : "idle";
+    if (key !== this.lastRenderKey) {
+      this.lastRenderKey = key;
+      this.update();
+    }
+
     this.rafId = requestAnimationFrame(this.renderLoop);
   };
 
@@ -582,9 +633,9 @@ export class EyedropperOverlay {
     this.loupe.style.transform = `translate(${tx}px, ${ty}px)`;
     this.loupe.style.opacity = "1";
 
-    this.drawLens();
-
-    const hex = this.resolveColorAt(this.pointerX, this.pointerY);
+    // drawLens already resolved the colour under the crosshair — reuse it
+    // instead of running the DOM probe (or the area average) twice this frame.
+    const hex = this.drawLens();
     if (hex && this.hexLabel && this.swatchDot) {
       this.hexLabel.textContent = formatColor(hex, this.colorFormat);
       this.swatchDot.style.backgroundColor = hex;
@@ -641,10 +692,10 @@ export class EyedropperOverlay {
     showCopyToast(formatted, hex);
   }
 
-  private drawLens(): void {
+  private drawLens(): string | null {
     const lensCtx = this.lensCtx;
     if (!lensCtx || !this.ctx) {
-      return;
+      return null;
     }
 
     const { x: px, y: py } = this.clientToCanvas(this.pointerX, this.pointerY);
@@ -655,11 +706,22 @@ export class EyedropperOverlay {
     lensCtx.clearRect(0, 0, LOUPE_SIZE, LOUPE_SIZE);
     lensCtx.imageSmoothingEnabled = this.zoom < 1;
 
+    // Read the whole magnified neighbourhood in one getImageData rather than
+    // one per cell: 121 GPU->CPU readbacks a frame was the other half of the
+    // stall. Offsets below stay inside this block by construction.
+    const minOffset = Math.round((0 - center) / this.zoom);
+    const maxOffset = Math.round((SAMPLE - 1 - center) / this.zoom);
+    const blockAt = this.readBlock(
+      px + minOffset,
+      py + minOffset,
+      maxOffset - minOffset + 1
+    );
+
     for (let row = 0; row < SAMPLE; row += 1) {
       for (let col = 0; col < SAMPLE; col += 1) {
         const offsetX = Math.round((col - center) / this.zoom);
         const offsetY = Math.round((row - center) / this.zoom);
-        const hex = this.readHex(px + offsetX, py + offsetY);
+        const hex = blockAt(px + offsetX, py + offsetY);
         lensCtx.fillStyle = hex ?? "rgba(0,0,0,0)";
         lensCtx.fillRect(
           Math.floor(col * cell),
@@ -695,6 +757,47 @@ export class EyedropperOverlay {
         Math.ceil(cell)
       );
     }
+
+    return resolved;
+  }
+
+  /**
+   * Grab a square of captured pixels in a single readback and return a lookup
+   * in canvas coordinates. Out-of-bounds reads yield null, matching readHex, so
+   * the lens still clips correctly at the edges of the capture.
+   */
+  private readBlock(
+    originX: number,
+    originY: number,
+    size: number
+  ): (x: number, y: number) => string | null {
+    const ctx = this.ctx;
+    const canvas = this.canvas;
+    if (!ctx || !canvas) {
+      return () => null;
+    }
+
+    const x0 = Math.max(0, originX);
+    const y0 = Math.max(0, originY);
+    const x1 = Math.min(canvas.width, originX + size);
+    const y1 = Math.min(canvas.height, originY + size);
+    if (x1 <= x0 || y1 <= y0) {
+      return () => null;
+    }
+
+    const width = x1 - x0;
+    const { data } = ctx.getImageData(x0, y0, width, y1 - y0);
+    const toHex = (value: number) => value.toString(16).padStart(2, "0");
+
+    return (x: number, y: number): string | null => {
+      if (x < x0 || y < y0 || x >= x1 || y >= y1) {
+        return null;
+      }
+      const i = ((y - y0) * width + (x - x0)) * 4;
+      return `#${toHex(data[i]!)}${toHex(data[i + 1]!)}${toHex(
+        data[i + 2]!
+      )}`.toUpperCase();
+    };
   }
 
   /**
