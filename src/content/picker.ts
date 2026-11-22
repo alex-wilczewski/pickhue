@@ -15,7 +15,7 @@ import type { ColorFormat } from "../shared/types";
 const PICKER_ID = "pickhue-picker-root";
 /** Icon-only save action in the copy toast (label lives in aria-label/title). */
 const TOAST_PLUS_ICON = `<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>`;
-const TOAST_CHECK_ICON = `<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>`;
+const TOAST_CHECK_ICON = `<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M5 13l4 4L19 7" transform="translate(0 -0.63)" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>`;
 let lastToastHex: string | null = null;
 const TOAST_ID = "pickhue-copy-toast";
 let toastHideTimer = 0;
