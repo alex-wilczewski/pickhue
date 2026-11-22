@@ -35,9 +35,23 @@ export default defineManifest({
   // declared here so we never ship the @crxjs dynamic-import loader, which
   // strict page CSPs reject.
   //
-  // Do not request the broad "tabs" permission — chrome.tabs.sendMessage and
-  // chrome.tabs.captureVisibleTab work with activeTab + host access alone
-  // (Chrome Web Store: Purple Potassium).
+  // No "tabs" permission and no host_permissions. activeTab is an ALTERNATIVE
+  // to host access, not a companion to it:
+  //
+  //   - captureVisibleTab: "the extension must have either the <all_urls>
+  //     permission or the activeTab permission"
+  //   - scripting.executeScript on the active tab: allowed under activeTab so
+  //     long as "scripting" is also declared
+  //   - tabs.sendMessage: only ever reaches a content script we already
+  //     injected ourselves under that same grant
+  //
+  // Both entry points — the toolbar action and the start-picker command — are
+  // listed activeTab invocation triggers, so each one re-grants access to the
+  // current tab. The payoff is the install prompt: activeTab "displays no
+  // warning message during installation", where <all_urls> asks the user to
+  // allow reading and changing their data on every site they visit.
+  //
+  // Trade-off: an activeTab grant is revoked when the tab navigates away, so a
+  // panel left open across a navigation needs re-invoking. See store/PERMISSIONS.md.
   permissions: ["storage", "activeTab", "scripting"],
-  host_permissions: ["<all_urls>"],
 });

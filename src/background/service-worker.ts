@@ -15,8 +15,15 @@ const HARD_RESTRICTED_PREFIXES = [
 ];
 
 function isHardRestricted(url: string | undefined): boolean {
+  // Without host_permissions, tab.url is only populated once activeTab has been
+  // granted, so an undefined url is "unknown", not "restricted". Failing closed
+  // here would make the extension silently do nothing on a perfectly ordinary
+  // page. This check is only an optimisation that avoids a pointless injection
+  // attempt — Chrome itself still refuses to inject into restricted pages, and
+  // injectContentScript() swallows that rejection — so when the url is unknown
+  // it is both safe and more useful to try.
   if (!url) {
-    return true;
+    return false;
   }
   return HARD_RESTRICTED_PREFIXES.some((prefix) => url.startsWith(prefix));
 }

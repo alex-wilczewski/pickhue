@@ -18,7 +18,7 @@ Open `dist/manifest.json` and confirm:
 
 - `permissions` is exactly: `storage`, `activeTab`, `scripting`
 - There is **no** `"tabs"` permission
-- `host_permissions` still includes `<all_urls>` (needed for capture / inject)
+- `host_permissions` is **absent** — PickHue runs on `activeTab` alone (see PERMISSIONS.md)
 - `commands` declares `start-picker` (`Alt+Shift+P`) — this key needs **no** permission and triggers **no** new install warning
 
 ### What changed vs 2.0.4 (permissions view)
@@ -26,7 +26,7 @@ Open `dist/manifest.json` and confirm:
 | Manifest field | 2.0.4 | 3.0.0 |
 |---|---|---|
 | `permissions` | storage, activeTab, scripting | **unchanged** |
-| `host_permissions` | `<all_urls>` | **unchanged** |
+| `host_permissions` | `<all_urls>` | **removed in 3.2.0** — activeTab alone; no install warning |
 | `commands` | — | `start-picker` (new, no warning) |
 
 Nothing on the **Privacy practices** tab needs to change: no remote code, no analytics, no data collection. Palettes and settings live in `chrome.storage.sync`; the only outbound navigation is opening `pickhue.site` in a tab.
@@ -91,7 +91,7 @@ Because 3.0.0 is a major redesign, it *is* worth refreshing the listing this tim
 1. Dashboard → your **PickHue** item → **Package** → upload `pickhue-3.1.0.zip`
 2. Confirm the draft package shows version **3.1.0**
 3. Confirm privacy policy URL is current
-4. On the permissions review screen, confirm `tabs` is **not** listed and the set still reads storage / activeTab / scripting + `<all_urls>`
+4. On the permissions review screen, confirm the set reads storage / activeTab / scripting with **no host permissions** and no `tabs`
 5. Optionally refresh Store listing description and screenshots (see above)
 6. **Submit for review**
 

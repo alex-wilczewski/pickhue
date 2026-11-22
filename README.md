@@ -156,7 +156,7 @@ The logo mark lives at `public/icons/logo-mark.svg`. The toolbar/extension PNGs 
 
 | Permission | Why |
 |---|---|
-| `activeTab`, `host_permissions: <all_urls>` | Capture the visible page so colors can be sampled pixel-accurately |
+| `activeTab` | Capture the visible page so colors can be sampled pixel-accurately. Granted only when you click the icon or press the shortcut, and revoked when the tab navigates away. PickHue declares **no** `host_permissions`, so installing it shows no site-access warning — see [store/PERMISSIONS.md](store/PERMISSIONS.md) |
 | `scripting` | Inject the panel/eyedropper on pages that were already open before install |
 | `storage` | Persist your settings, recent colors, and saved palettes |
 
