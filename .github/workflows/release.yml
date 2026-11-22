@@ -7,7 +7,11 @@ name: Release
 # from the tagged commit.
 on:
   push:
-    tags: ["[0-9]+.[0-9]+.[0-9]+"]
+    # Tags are bare here (3.2.0), but v3.1.0 was pushed once from another
+    # machine, and a stricter pattern would have done nothing at all — with
+    # nothing anywhere to say why. Both spellings publish; the leading v is
+    # stripped when the version is read.
+    tags: ["[0-9]+.[0-9]+.[0-9]+", "v[0-9]+.[0-9]+.[0-9]+"]
   workflow_dispatch:
     inputs:
       tag:
@@ -40,11 +44,14 @@ jobs:
         run: |
           TAG="${{ inputs.tag || github.ref_name }}"
           PKG=$(node -p "require('./package.json').version")
-          if [ "$TAG" != "$PKG" ]; then
+          if [ "${TAG#v}" != "$PKG" ]; then
             echo "Tag $TAG does not match package.json version $PKG." >&2
             exit 1
           fi
+          # VERSION names the zip and finds the changelog entry; TAG_NAME is
+          # the ref exactly as pushed, which is what the release hangs under.
           echo "VERSION=$PKG" >> "$GITHUB_ENV"
+          echo "TAG_NAME=$TAG" >> "$GITHUB_ENV"
 
       - name: Typecheck
         run: npm run typecheck
@@ -86,7 +93,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${VERSION}" \
+          gh release create "${TAG_NAME}" \
             --title "PickHue ${VERSION}" \
             --notes-file release-notes.md \
             "pickhue-${VERSION}.zip"
