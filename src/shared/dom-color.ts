@@ -44,6 +44,38 @@ function hasNonSolidBackground(style: CSSStyleDeclaration): boolean {
   return !!image && image !== "none";
 }
 
+/** Replaced elements paint pixels of their own; nothing behind them shows. */
+const SELF_PAINTING_TAGS = new Set([
+  "IMG",
+  "CANVAS",
+  "VIDEO",
+  "PICTURE",
+  "OBJECT",
+  "EMBED",
+  "IFRAME",
+]);
+
+/**
+ * True when this element puts its own pixels on screen at the probe point, so
+ * no computed `background-color` found further down the stack is what the user
+ * is actually looking at. Covers replaced elements, any SVG content, CSS
+ * background images (gradients and sprites included), and partial opacity,
+ * which blends whatever is behind it.
+ */
+function paintsOwnContent(element: Element, style: CSSStyleDeclaration): boolean {
+  if (element instanceof SVGElement) {
+    return true;
+  }
+  if (SELF_PAINTING_TAGS.has(element.tagName)) {
+    return true;
+  }
+  if (hasNonSolidBackground(style)) {
+    return true;
+  }
+  const opacity = Number.parseFloat(style.opacity);
+  return Number.isFinite(opacity) && opacity < 0.995;
+}
+
 function colorFromTextAtPoint(x: number, y: number): string | null {
   if (typeof document.caretRangeFromPoint !== "function") {
     return null;
@@ -84,6 +116,13 @@ export function probeDomColor(x: number, y: number): string | null {
     return textColor;
   }
 
+  // elementsFromPoint is ordered topmost-first. The first element that paints
+  // anything of its own occludes everything beneath it, so the search has to
+  // STOP there rather than keep walking up to an ancestor's background-color —
+  // that ancestor's color is not what is on screen at this pixel. Falling
+  // through to null hands the decision to the captured bitmap, which is ground
+  // truth. (Walking past these was why a gradient or canvas — GitHub's grid
+  // panels, any photo, any SVG icon — reported the page background instead.)
   const elements = document.elementsFromPoint(x, y);
   for (const element of elements) {
     if (isExtensionElement(element)) {
@@ -91,8 +130,8 @@ export function probeDomColor(x: number, y: number): string | null {
     }
 
     const style = getComputedStyle(element);
-    if (hasNonSolidBackground(style)) {
-      continue;
+    if (paintsOwnContent(element, style)) {
+      return null;
     }
 
     const background = parseOpaqueCssColor(style.backgroundColor);
