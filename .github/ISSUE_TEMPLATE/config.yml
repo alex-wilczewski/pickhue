@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: PickHue website
+    url: https://pickhue.site
+    about: What PickHue does, with screenshots.
+  - name: Security or privacy issue
+    url: https://github.com/alex-wilczewski/pickhue/blob/main/CONTRIBUTING.md#security
+    about: Please report these privately rather than in a public issue.

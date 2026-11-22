@@ -12,6 +12,7 @@ All notable changes to PickHue are documented here.
 - **No more "read and change all your data on all websites"** — PickHue no longer requests `<all_urls>`. It runs on `activeTab` alone, which Chrome grants when you click the icon or press the shortcut and revokes when the tab navigates, so installing it now shows **no site-access warning at all**. See [store/PERMISSIONS.md](store/PERMISSIONS.md)
 - **Correct colors over images, gradients and canvases** — the CSS probe used to walk *past* an element that painted its own pixels and report an ancestor's background instead, so a gradient panel, a photo, a `<canvas>` or an SVG icon could report the page background rather than what you were pointing at. It now defers to the captured pixel whenever something paints over the stack
 - **Calmer scroll recapture** — the loupe steps aside as soon as the page starts moving, instead of showing stale pixels and then blinking once scrolling stops, and fades back in when the fresh capture lands. Captures are also spaced to stay under Chrome's 2-per-second limit, which stop-start scrolling could previously exceed, silently leaving the loupe stale
+- **Under the hood** — PickHue now has a test suite (colour conversion, the DOM probe, the accent system, palette import/export) and CI that typechecks, tests, builds, and fails if the permission set ever changes. Releases are built and published from a version tag rather than by hand, and the repo has contributor docs and issue templates
 
 ## [3.1.1] — 2026-09-04
 

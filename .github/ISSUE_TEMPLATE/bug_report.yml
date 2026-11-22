@@ -1,0 +1,64 @@
+name: Bug report
+description: Something in PickHue behaves wrongly
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. Colour bugs are often page-specific, so the
+        URL and a screenshot usually matter more than a long description.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, and what PickHue did instead of what you expected.
+      placeholder: |
+        Picked the green grid on a GitHub insights panel. The loupe showed the
+        page background colour instead of the green under the crosshair.
+    validations:
+      required: true
+
+  - type: input
+    id: url
+    attributes:
+      label: Where it happened
+      description: The page URL, if it is public. "Any page" is a useful answer too.
+      placeholder: https://github.com/…
+
+  - type: input
+    id: version
+    attributes:
+      label: PickHue version
+      description: Shown on the extension's card in chrome://extensions.
+      placeholder: "3.2.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: browser
+    attributes:
+      label: Browser
+      options:
+        - Chrome
+        - Brave
+        - Edge
+        - Arc
+        - Other Chromium browser
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: macOS 15.1 / Windows 11 / Ubuntu 24.04
+
+  - type: textarea
+    id: screenshot
+    attributes:
+      label: Screenshot
+      description: |
+        Paste an image if you can. For a wrong colour, a shot with the loupe
+        visible — plus the value you expected — is the single most useful thing
+        you can attach.

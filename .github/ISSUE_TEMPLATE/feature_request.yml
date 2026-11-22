@@ -1,0 +1,33 @@
+name: Feature request
+description: Suggest something PickHue should do
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        PickHue tries to stay small and sharp rather than grow endlessly, so
+        the "what are you actually trying to do" part carries most of the
+        weight here.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do
+      description: The situation you are in when you reach for this, not the feature itself.
+      placeholder: |
+        I pull colours from screenshots of designs, and I usually need the
+        Tailwind step closest to what I picked, not the raw value.
+    validations:
+      required: true
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: What you have in mind
+      description: Optional — a rough shape is fine, and so is leaving it blank.
+
+  - type: textarea
+    id: workaround
+    attributes:
+      label: How you handle it today
+      description: What you do instead right now, and where that falls down.

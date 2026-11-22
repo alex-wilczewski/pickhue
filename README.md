@@ -4,16 +4,25 @@
 
 PickHue lets you grab any color on any page with a precise on-screen magnifier, copies it to your clipboard in the format you want, and keeps a tidy history of recent colors — all from a clean panel that lives right on the page.
 
-**Free. No accounts. No tracking. Nothing leaves your machine.**
+**Free. Open source. No accounts. No tracking. Nothing leaves your machine.**
+
+> [!NOTE]
+> As of **3.2.0**, installing PickHue shows **no site-access warning**. It runs on `activeTab` alone — access is granted when you click the icon and revoked when the tab navigates away. See [store/PERMISSIONS.md](store/PERMISSIONS.md).
 
 ---
 
 ## Features
 
 - 🎯 **Pixel-precise eyedropper** — a circular magnifier loupe follows your cursor so you pick the exact pixel you mean.
-- 📋 **Copy in your format** — choose **HEX**, **RGB**, **HSL**, or **OKLCH**; picks are copied automatically on click.
+- 📋 **Seven formats** — HEX, RGB, HSL, OKLCH, LCH, OKLAB, and HWB. Picks are copied automatically on click; right-click any swatch to copy it in a different format.
+- 🔬 **Area-average sampling** — press `S` while picking to cycle 1×1 / 3×3 / 5×5 averaging for photos and antialiased edges.
 - 🕘 **Recent colors** — every pick is saved; click any swatch to copy it again, and scroll the row for older picks.
-- 🎨 **Saved palettes** — group colors into named palettes; reorder, import, export, and save picks from recents or the copy toast.
+- 🎨 **Saved palettes** — group colors into named palettes; reorder, import, and export as hex list, CSS variables, Tailwind config, Adobe ASE, or JSON.
+- 🪄 **Color Card** — every palette swatch opens a card with OKLCH tune sliders and a 10-step shades & tints ramp. Stage the steps you want and commit them together.
+- ♿ **Contrast checker** — WCAG ratios and AAA / AA grades against white, black, and every other color in the palette, updating live as you tune.
+- ✨ **Palette from this page** — one click gathers the page's colors grouped into backgrounds, text, and borders, with near-duplicates merged perceptually.
+- 💅 **Wears your colors** — the whole UI derives its accent from your last pick, computed in OKLCH so every hue stays vibrant and the text stays legible.
+- ⌨️ **Keyboard** — `Alt+Shift+P` starts the eyedropper (remappable), arrow keys nudge one pixel (`Shift` = 10), `Enter` picks, `Esc` cancels.
 - 🌗 **System, light & dark** — match your OS or pick a fixed theme.
 - 🪟 **Real rounded UI** — the interface is injected into the page (like Pocket and Prod), so it gets true rounded corners and shadows instead of the browser's boxy popup.
 - 🔒 **Private by design** — the page is sampled locally; no servers, no third parties.
@@ -26,7 +35,7 @@ PickHue lets you grab any color on any page with a precise on-screen magnifier, 
 
 **Quick install (developer / GitHub)**
 
-1. Download **pickhue-2.0.3.zip** from [Releases](https://github.com/alex-wilczewski/pickhue/releases/latest)
+1. Download the latest `pickhue-*.zip` from [Releases](https://github.com/alex-wilczewski/pickhue/releases/latest) — every release zip is built by CI from its tagged commit
 2. Unzip the archive
 3. Open `chrome://extensions` (or `brave://extensions`)
 4. Enable **Developer mode** → **Load unpacked** → select the unzipped folder (must contain `manifest.json`)
@@ -37,7 +46,6 @@ PickHue lets you grab any color on any page with a precise on-screen magnifier, 
 ```bash
 git clone https://github.com/alex-wilczewski/pickhue.git
 cd pickhue
-git checkout 2.0.3
 npm install
 npm run build
 ```
@@ -48,22 +56,25 @@ Then load the `dist/` folder as above.
 
 ## How to Use
 
-**TLDR:** Click the PickHue icon → click **Select Color** → click any pixel → it's copied.
+**TLDR:** Click the PickHue icon (or press `Alt+Shift+P`) → click any pixel → it's copied.
 
 **1. Open the panel**
 Click the PickHue icon in your toolbar. The panel slides in at the top-right of the page.
 
 **2. Start picking**
-Click **Select Color**. The panel steps aside and a magnifier loupe appears under your cursor.
+Click **Select Color**. The panel steps aside and a magnifier loupe appears under your cursor. `Alt+Shift+P` skips straight to this step.
 
 **3. Pick a color**
-Move to the pixel you want and click. The color is copied to your clipboard, a toast confirms it, and it's added to the front of **Recent Colors**. Press **Esc** to cancel without picking.
+Move to the pixel you want and click. The color is copied to your clipboard, a toast confirms it, and it's added to the front of **Recent Colors**. Press `S` to average a 3×3 or 5×5 area, arrow keys to nudge by a pixel, and **Esc** to cancel without picking.
 
 **4. Reuse colors**
-Click any recent swatch to copy it again. Scroll the recent-colors row (just hover and scroll) to reach older picks.
+Click any recent swatch to copy it again, or right-click it for the same color in any other format. Scroll the recent-colors row (just hover and scroll) to reach older picks.
 
-**5. Palettes (v2.0)**
-Use **Save to palette** on Recent Colors to batch-add swatches to a saved palette, or tap **Save to palette** on the copy toast after a pick. Open any palette from **Saved Palettes** to rename, reorder, import, or export.
+**5. Palettes**
+Press **+** in **Saved Palettes** to make one — from your current selection if you have swatches selected — or tap **+** on the copy toast right after a pick. The ✨ action builds a palette from the colors already on the page. Open any palette to rename, reorder, import, or export it.
+
+**6. Tune and check**
+Click a swatch inside a palette to open its **Color Card**: OKLCH sliders, a shades & tints ramp you can stage steps from, and a contrast section with WCAG grades against white, black, and the rest of the palette.
 
 ---
 
@@ -78,6 +89,9 @@ The panel and eyedropper run as a content script injected into the page, so they
 
 > [!NOTE]
 > On a page where PickHue can't run, clicking the toolbar icon briefly shows an **n/a** badge instead of opening the panel.
+
+> [!TIP]
+> Because PickHue asks for no standing site access, its permission to read a tab ends when that tab navigates. If you follow a link with the panel open, click the icon again (or press `Alt+Shift+P`) on the new page.
 
 ---
 
@@ -105,7 +119,7 @@ flowchart LR
     S --> R[("Recent colors\nchrome.storage")]
     S --> T([Toast + panel returns])
 
-    classDef accent fill:#e7fe96,stroke:none,color:#141414
+    classDef accent fill:#87d624,stroke:none,color:#141414
     classDef done fill:#313131,stroke:none,color:#ffffff
     class A accent
     class T done
@@ -113,10 +127,11 @@ flowchart LR
     style page fill:#edebe1,stroke:#d4d1c8
 ```
 
-A couple of details that make it feel right:
+A few details that make it feel right:
 
 - **Shadow DOM isolation.** The panel renders inside a shadow root so the host page's CSS can never leak in and break the design.
 - **Accurate sampling.** Clicking the icon captures the visible tab, and the loupe magnifies that bitmap — so the pixel under the reticle is exactly what gets copied.
+- **The bitmap wins.** A DOM probe reads computed CSS to beat the screenshot on antialiased text and sub-pixel rounding, but it stands down the moment something paints its own pixels — images, canvases, gradients, SVG — because there the screenshot is ground truth.
 - **Gesture-safe clipboard.** The copy happens synchronously inside your click, so it works reliably even when the page isn't focused.
 
 ---
@@ -125,9 +140,14 @@ A couple of details that make it feel right:
 
 ```bash
 npm run dev        # rebuild on change (load dist/ as an unpacked extension)
-npm run build      # production build into dist/
+npm run build      # production build into dist/ (icons + content script)
 npm run typecheck  # type-check without emitting
+npm test           # run the test suite once
+npm run test:watch # run it on change
+npm run package    # build, verify the manifest, and zip for the Web Store
 ```
+
+Every push and pull request runs typecheck, tests, and a build in [CI](.github/workflows/ci.yml), which finishes by asserting the built manifest still requests no host permissions. Pushing a version tag (`3.2.0`) builds and publishes a GitHub release with the zip attached.
 
 ### Project structure
 
@@ -140,10 +160,19 @@ src/
     palette-editor.ts            # palette editor sub-view
     palette-menu.ts              # palette picker / action menus
     picker.ts / picker.css       # the eyedropper magnifier overlay
-  shared/                        # colors, storage, palette-io, clipboard, types
+  shared/
+    accent.ts                    # derives the UI accent from your last pick (OKLCH)
+    colors.ts                    # conversions + the exact strings that get copied
+    dom-color.ts                 # CSS probe under the cursor; defers to the bitmap
+    palette-io.ts                # import / export (JSON, ASE, CSS, Tailwind)
+    *.test.ts                    # vitest suites, run by `npm test`
   manifest.ts                    # MV3 manifest
-scripts/generate-icons.mjs       # builds PNG icons from the logo SVG
+scripts/
+  generate-icons.mjs             # builds PNG icons from the logo SVG
+  check-manifest.mjs             # fails the build if the permission set changes
+  package-extension.mjs          # zips dist/ for the Web Store
 public/icons/logo-mark.svg       # source logo mark
+store/                           # Web Store listing copy, permissions rationale
 ```
 
 ### Customizing the logo
@@ -160,23 +189,33 @@ The logo mark lives at `public/icons/logo-mark.svg`. The toolbar/extension PNGs 
 | `scripting` | Inject the panel/eyedropper on pages that were already open before install |
 | `storage` | Persist your settings, recent colors, and saved palettes |
 
+No network access, no remote code, no analytics. Your palettes and settings live in `chrome.storage.sync`, which is between you and your browser.
+
 ---
 
-## Roadmap
+## Releases
 
-- [x] Publish to the Chrome Web Store (v0.1.x live)
-- [x] Palettes release (v2.0.x)
-- [ ] Chrome Web Store update for v2.0.4 (tabs permission removed)
-- [ ] Landing page update for v2.0
+[CHANGELOG.md](./CHANGELOG.md) has the full history. Recent highlights:
+
+- **3.2.0** — no site-access warning on install; the original green returns as the default accent; neutral picks drive the UI properly; correct colors over images, gradients, and canvases
+- **3.1.0** — Color Card, contrast checker, palette from this page, area-average sampling, three more formats
+- **3.0.0** — dynamic accent, keyboard shortcut, palette editor overhaul, shades & tints
+- **2.0.0** — saved palettes
+
+---
+
+## Contributing
+
+Issues and pull requests are welcome — see [CONTRIBUTING.md](./CONTRIBUTING.md) for how to run it locally, what the tests cover, and which bits of the design are deliberate. For anything larger than a fix, opening an issue first is the quickest route.
 
 ---
 
 ## Tech
 
-TypeScript · Vite · [`@crxjs/vite-plugin`](https://github.com/crxjs/chrome-extension-tools) · Manifest V3 · Shadow DOM · `sharp` (icon generation)
+TypeScript · Vite · [`@crxjs/vite-plugin`](https://github.com/crxjs/chrome-extension-tools) · Manifest V3 · Shadow DOM · Vitest · `sharp` (icon generation)
 
 ---
 
 ## License
 
-[MIT](./LICENSE)
+[MIT](./LICENSE) — free to use, fork, and learn from.
