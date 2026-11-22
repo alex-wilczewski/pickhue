@@ -45,6 +45,39 @@ and navigate to a different page in the same tab, PickHue needs invoking again
 (click the icon or press the shortcut) before it can sample that new page. This
 is the intended cost: access is scoped to the moment you asked for it.
 
+## Dashboard justification fields (paste as-is)
+
+The Web Store's **Privacy practices** tab asks for one justification per
+permission, max 1,000 characters each. Since 3.2.0 there is no host permission
+field — removing `<all_urls>` removed the box with it.
+
+### storage
+
+```
+Stores PickHue's own settings and data in Chrome's extension storage: theme preference, preferred color format, recent color picks, and saved palettes — named sets of colors the user chooses to keep. This is what lets preferences and palettes persist between sessions and follow the user across devices where they are signed into Chrome. PickHue has no backend: nothing is sent to any server we operate or to any third party, and there is no analytics or tracking.
+```
+
+### activeTab
+
+```
+Required to read the single tab the user invokes PickHue on. When the user clicks the toolbar icon or presses the keyboard shortcut (Alt+Shift+P), PickHue captures the visible area of that tab with tabs.captureVisibleTab and samples the pixel under the cursor, which is how the eyedropper reports an accurate color. PickHue declares no host permissions: activeTab is its only page access, it is granted only by that explicit user gesture, and it ends when the tab navigates away or closes. Page content is never stored or transmitted — the capture is held in memory while picking and discarded as soon as it stops.
+```
+
+### scripting
+
+```
+Required to inject PickHue's panel and eyedropper overlay into the active tab when the user invokes the extension. PickHue declares no automatic content scripts, so nothing runs on any page until the user asks for it. The script is bundled in the package and injected on demand; no remote code is loaded.
+```
+
+### Single purpose
+
+```
+PickHue lets users pick colors from webpages using an on-page eyedropper magnifier and copy them to the clipboard.
+```
+
+Palettes and recent colors are supporting functionality for that one purpose,
+so they do not belong in this field — Chrome wants it narrow.
+
 ## What PickHue cannot do
 
 - It cannot run on browser-internal pages (`chrome://`, `brave://`, `edge://`,
