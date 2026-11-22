@@ -128,9 +128,7 @@ const TEMPLATE = `
             <h2 class="panel__label">Saved Palettes</h2>
             <span class="panel__section-actions">
               <button type="button" class="panel__section-action panel__section-action--icon" data-ref="extract-page" aria-label="New palette from this page">${SPARKLE_ICON_HTML}</button>
-              <button type="button" class="panel__section-action" data-ref="new-palette">
-                New palette
-              </button>
+              <button type="button" class="panel__section-action panel__section-action--icon" data-ref="new-palette" aria-label="New palette">${PLUS_ICON_HTML}</button>
             </span>
           </div>
           <div class="panel__palettes-wrap" data-ref="palette-list-wrap">
@@ -800,7 +798,8 @@ export class PanelController {
       this.hide();
     });
 
-    this.ref<HTMLButtonElement>("new-palette")?.addEventListener("click", () => {
+    const newPaletteBtn = this.ref<HTMLButtonElement>("new-palette");
+    newPaletteBtn?.addEventListener("click", () => {
       if (this.selectionMode && !this.canSaveToPalette()) {
         return;
       }
@@ -810,6 +809,14 @@ export class PanelController {
       }
       void this.openNewPalette();
     });
+    if (newPaletteBtn) {
+      // Icon-only action: the label lives in the tooltip + aria-label.
+      this.swatchTooltip?.attach(newPaletteBtn, () =>
+        this.canSaveToPalette()
+          ? "New palette from selection"
+          : "New palette"
+      );
+    }
 
     const shortcutBtn = this.ref<HTMLButtonElement>("shortcut");
     shortcutBtn?.addEventListener("click", () => {
@@ -1637,7 +1644,7 @@ export class PanelController {
       const empty = document.createElement("p");
       empty.className = "panel__palettes-empty";
       empty.textContent = this.canSaveToPalette()
-        ? "No palettes yet — use New palette above."
+        ? "No palettes yet — use + above."
         : "Group colors into named palettes.";
       list.replaceChildren(empty);
       this.syncPaletteListState();
